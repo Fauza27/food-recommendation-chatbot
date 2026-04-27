@@ -1,0 +1,348 @@
+{
+  "info": {
+    "name": "Food Recommendation API",
+    "description": "API collection for Food Recommendation Chatbot - Posts API & Chat API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "12345"
+  },
+  "item": [
+    {
+      "name": "Health & Info",
+      "item": [
+        {
+          "name": "Root - API Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"],
+              "path": [""]
+            },
+            "description": "Get API information and status"
+          }
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Check if API is healthy"
+          }
+        },
+        {
+          "name": "Get Current Time",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/time",
+              "host": ["{{base_url}}"],
+              "path": ["time"]
+            },
+            "description": "Get current time in Samarinda (WITA)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Posts API",
+      "item": [
+        {
+          "name": "Get Posts - Basic",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/posts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts"]
+            },
+            "description": "Get first page of restaurants (default 20 items)"
+          }
+        },
+        {
+          "name": "Get Posts - Page 2",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/posts?page=2&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "2"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get second page with 20 items"
+          }
+        },
+        {
+          "name": "Search - Japanese",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/posts?search=japanese",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "japanese"
+                }
+              ]
+            },
+            "description": "Search for Japanese restaurants"
+          }
+        },
+        {
+          "name": "Search - Ayam",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/posts?search=ayam",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "ayam"
+                }
+              ]
+            },
+            "description": "Search for chicken restaurants"
+          }
+        },
+        {
+          "name": "Filter - Japanese Food",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/posts?category=Japanese Food",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts"],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "Japanese Food"
+                }
+              ]
+            },
+            "description": "Filter by Japanese Food category"
+          }
+        },
+        {
+          "name": "Filter - Fast Food",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/posts?category=Fast Food",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts"],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "Fast Food"
+                }
+              ]
+            },
+            "description": "Filter by Fast Food category"
+          }
+        },
+        {
+          "name": "Filter - Pedas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/posts?category=pedas",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts"],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "pedas"
+                }
+              ]
+            },
+            "description": "Filter by pedas tag"
+          }
+        },
+        {
+          "name": "Search + Filter - Ayam Pedas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/posts?search=ayam&category=pedas",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "ayam"
+                },
+                {
+                  "key": "category",
+                  "value": "pedas"
+                }
+              ]
+            },
+            "description": "Search ayam with pedas filter"
+          }
+        },
+        {
+          "name": "Get All Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/categories",
+              "host": ["{{base_url}}"],
+              "path": ["api", "categories"]
+            },
+            "description": "Get all available categories"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat API",
+      "item": [
+        {
+          "name": "Chat - Rekomendasi Murah",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Rekomendasi tempat makan yang murah\",\n  \"conversation_history\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat",
+              "host": ["{{base_url}}"],
+              "path": ["chat"]
+            },
+            "description": "Ask for cheap restaurant recommendations"
+          }
+        },
+        {
+          "name": "Chat - Sarapan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Rekomendasi tempat sarapan yang enak\",\n  \"conversation_history\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat",
+              "host": ["{{base_url}}"],
+              "path": ["chat"]
+            },
+            "description": "Ask for breakfast recommendations"
+          }
+        },
+        {
+          "name": "Chat - Japanese Food",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Rekomendasi tempat makan japanese yang murah\",\n  \"conversation_history\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat",
+              "host": ["{{base_url}}"],
+              "path": ["chat"]
+            },
+            "description": "Ask for cheap Japanese food"
+          }
+        },
+        {
+          "name": "Chat - With History",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Yang ada wifi nya\",\n  \"conversation_history\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Rekomendasi tempat nongkrong\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"Berikut beberapa rekomendasi tempat nongkrong...\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat",
+              "host": ["{{base_url}}"],
+              "path": ["chat"]
+            },
+            "description": "Chat with conversation history"
+          }
+        },
+        {
+          "name": "Chat - Specific Count",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Berikan 5 rekomendasi tempat makan murah\",\n  \"conversation_history\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat",
+              "host": ["{{base_url}}"],
+              "path": ["chat"]
+            },
+            "description": "Request specific number of recommendations"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    }
+  ]
+}
