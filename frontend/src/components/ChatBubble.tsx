@@ -21,22 +21,22 @@ export function ChatBubble({ message }: Props) {
       className={`flex gap-2 px-4 ${isUser ? "justify-end" : "justify-start"}`}
     >
       {!isUser && (
-        <div className="h-7 w-7 bg-[hsl(var(--color-foreground))] rounded-lg flex-shrink-0 flex items-center justify-center mt-1">
-          <Bot className="h-4 w-4 text-[hsl(var(--color-background))]" />
+        <div className="h-7 w-7 bg-foreground rounded-lg shrink-0 flex items-center justify-center mt-1">
+          <Bot className="h-4 w-4 text-background" />
         </div>
       )}
       <div className={`max-w-[85%] md:max-w-[70%] space-y-3`}>
         <div
           className={`px-4 py-2.5 text-sm leading-relaxed transition-smooth ${
             isUser
-              ? "bg-[hsl(var(--color-foreground))] text-[hsl(var(--color-background))] rounded-2xl rounded-tr-sm"
-              : "bg-[hsl(var(--color-card))] border border-[hsl(var(--color-border))] text-[hsl(var(--color-foreground))] rounded-2xl rounded-tl-sm"
+              ? "bg-foreground text-background rounded-2xl rounded-tr-sm"
+              : "bg-card border border-border text-foreground rounded-2xl rounded-tl-sm"
           }`}
         >
           {isUser ? (
             <p>{message.content}</p>
           ) : (
-            <div className="prose prose-sm max-w-none prose-p:my-2 prose-p:leading-relaxed prose-li:my-0.5 prose-headings:text-[hsl(var(--color-foreground))] prose-headings:font-semibold prose-strong:text-[hsl(var(--color-foreground))] prose-strong:font-bold prose-a:text-[hsl(var(--color-foreground))] prose-a:underline">
+            <div className="prose prose-sm max-w-none prose-p:my-2 prose-p:leading-relaxed prose-li:my-0.5 prose-headings:text-foreground prose-headings:font-semibold prose-strong:text-foreground prose-strong:font-bold prose-a:text-foreground prose-a:underline">
               <ReactMarkdown>{message.content}</ReactMarkdown>
             </div>
           )}

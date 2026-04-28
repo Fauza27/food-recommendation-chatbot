@@ -33,16 +33,16 @@ export function TypingIndicator() {
 
   return (
     <div className="flex items-center gap-2 px-4 py-3 animate-fade-in">
-      <div className="h-7 w-7 bg-[hsl(var(--color-foreground))] rounded-lg flex items-center justify-center">
-        <Bot className="h-4 w-4 text-[hsl(var(--color-background))]" />
+      <div className="h-7 w-7 bg-foreground rounded-lg flex items-center justify-center">
+        <Bot className="h-4 w-4 text-background" />
       </div>
-      <div className="bg-[hsl(var(--color-card))] border border-[hsl(var(--color-border))] rounded-xl px-4 py-2.5 flex items-center gap-3 min-w-[280px]">
+      <div className="bg-card border border-border rounded-xl px-4 py-2.5 flex items-center gap-3 min-w-[280px]">
         <div className="flex items-center gap-1.5">
-          <div className="typing-dot h-2 w-2 rounded-full bg-[hsl(var(--color-foreground))]/60 animate-bounce" style={{ animationDelay: '0ms' }} />
-          <div className="typing-dot h-2 w-2 rounded-full bg-[hsl(var(--color-foreground))]/60 animate-bounce" style={{ animationDelay: '150ms' }} />
-          <div className="typing-dot h-2 w-2 rounded-full bg-[hsl(var(--color-foreground))]/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+          <div className="typing-dot h-2 w-2 rounded-full bg-foreground/60 animate-bounce" style={{ animationDelay: '0ms' }} />
+          <div className="typing-dot h-2 w-2 rounded-full bg-foreground/60 animate-bounce" style={{ animationDelay: '150ms' }} />
+          <div className="typing-dot h-2 w-2 rounded-full bg-foreground/60 animate-bounce" style={{ animationDelay: '300ms' }} />
         </div>
-        <span className="text-xs text-[hsl(var(--color-muted-foreground))] transition-all duration-300">
+        <span className="text-xs text-muted-foreground transition-all duration-300">
           {LOADING_STAGES[currentStage].text}
         </span>
       </div>
