@@ -74,11 +74,11 @@ export default function Home() {
         {isEmpty ? (
           <div className="flex flex-col items-center justify-center h-full px-4 text-center gap-6">
             <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.5 }}>
-              <div className="h-20 w-20 bg-[hsl(var(--color-foreground))] flex items-center justify-center mb-4 mx-auto rounded-2xl">
-                <Bot className="h-10 w-10 text-[hsl(var(--color-background))]" />
+              <div className="h-20 w-20 bg-foreground flex items-center justify-center mb-4 mx-auto rounded-2xl">
+                <Bot className="h-10 w-10 text-background" />
               </div>
-              <h2 className="text-3xl font-bold text-[hsl(var(--color-foreground))]">Hai! Mau makan apa hari ini?</h2>
-              <p className="text-[hsl(var(--color-muted-foreground))] mt-2 max-w-md">
+              <h2 className="text-3xl font-bold text-foreground">Hai! Mau makan apa hari ini?</h2>
+              <p className="text-muted-foreground mt-2 max-w-md">
                 Ceritakan preferensi kamu dan aku akan rekomendasikan tempat makan terbaik untukmu.
               </p>
             </motion.div>
@@ -89,7 +89,7 @@ export default function Home() {
                   whileHover={{ scale: 1.04 }}
                   whileTap={{ scale: 0.97 }}
                   onClick={() => handleSend(s)}
-                  className="px-4 py-2 bg-[hsl(var(--color-card))] border border-[hsl(var(--color-border))] rounded-lg text-sm text-[hsl(var(--color-foreground))] hover:bg-[hsl(var(--color-muted))] transition-smooth"
+                  className="px-4 py-2 bg-card border border-border rounded-lg text-sm text-foreground hover:bg-muted transition-smooth"
                 >
                   {s}
                 </motion.button>
@@ -114,7 +114,7 @@ export default function Home() {
       </div>
 
       {/* Input bar */}
-      <div className="bg-[hsl(var(--color-card))] border-t border-[hsl(var(--color-border))] p-3">
+      <div className="bg-card border-t border-border p-3">
         <div className="max-w-3xl mx-auto flex items-end gap-2">
           <textarea
             ref={inputRef}
@@ -123,13 +123,13 @@ export default function Home() {
             onKeyDown={handleKeyDown}
             placeholder="Cari rekomendasi makanan..."
             rows={1}
-            className="flex-1 resize-none bg-[hsl(var(--color-background))] border border-[hsl(var(--color-border))] rounded-lg px-4 py-2.5 text-sm text-[hsl(var(--color-foreground))] placeholder:text-[hsl(var(--color-muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--color-foreground))] max-h-32 transition-smooth"
+            className="flex-1 resize-none bg-background border border-border rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground max-h-32 transition-smooth"
           />
           <Button
             onClick={() => handleSend()}
             disabled={!input.trim() || loading}
             size="icon"
-            className="h-10 w-10 bg-[hsl(var(--color-foreground))] hover:bg-[hsl(var(--color-foreground))]/90 text-[hsl(var(--color-background))] shrink-0 transition-smooth"
+            className="h-10 w-10 bg-foreground hover:bg-foreground/90 text-background shrink-0 transition-smooth"
           >
             <Send className="h-4 w-4" />
           </Button>
