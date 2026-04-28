@@ -14,7 +14,10 @@ class PostsService:
     Data dimuat sekali saat startup dan disimpan di memori.
     """
 
-    def __init__(self, data_path: str = "../data/cleaned_enhanced_data_2.csv") -> None:
+    def __init__(self, data_path: str | None = None) -> None:
+        if data_path is None:
+            current_dir = Path(__file__).parent
+            data_path = current_dir.parent / "data" / "cleaned_enhanced_data_2.csv"
         self._data_path = Path(data_path)
         self._df: pd.DataFrame = pd.DataFrame()
         self._load_data()
@@ -73,6 +76,7 @@ class PostsService:
             "ringkasan": str(row.get("ringkasan", "")),
             "tags": self._parse_list_field(row.get("tags")),
             "url": str(row.get("url", "")),
+            "link_lokasi": str(row.get("link_lokasi", "")),
         }
 
     def get_posts(

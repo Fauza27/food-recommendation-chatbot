@@ -228,6 +228,10 @@ DATA RESTORAN YANG TERSEDIA:
         for resto in restaurants:
             if len(cards) >= max_cards:
                 break
+            
+            # Ambil link Instagram dari URL jika ada
+            link_instagram = resto.get("link_instagram") or resto.get("url", "#")
+            
             cards.append(
                 RestaurantCard(
                     nama_tempat=resto.get("nama_tempat", "Unknown"),
@@ -235,7 +239,7 @@ DATA RESTORAN YANG TERSEDIA:
                     kategori_makanan=resto.get("kategori_makanan", "Unknown"),
                     range_harga=resto.get("range_harga", "Unknown"),
                     link_lokasi=resto.get("link_lokasi", "#"),
-                    link_instagram=resto.get("link_instagram", "#"),
+                    link_instagram=link_instagram,
                     jam_buka=resto.get("jam_buka"),
                     jam_tutup=resto.get("jam_tutup"),
                     status_operasional=resto.get("status_operasional", "Unknown"),
