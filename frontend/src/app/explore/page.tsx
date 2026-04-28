@@ -15,7 +15,7 @@ function ExploreCard({ restaurant, index }: { restaurant: Restaurant; index: num
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.04, duration: 0.3 }}
-      className="group glass-card p-5 space-y-4 hover:glass hover:glow-primary transition-smooth cursor-pointer"
+      className="group bg-[hsl(var(--color-card))] border border-[hsl(var(--color-border))] rounded-xl p-5 space-y-4 hover:shadow-lg transition-smooth cursor-pointer"
     >
       {/* Header with title and category badge */}
       <div className="space-y-2">
@@ -25,7 +25,7 @@ function ExploreCard({ restaurant, index }: { restaurant: Restaurant; index: num
           </h3>
           <Badge 
             variant="outline" 
-            className="text-[hsl(var(--color-primary))] border-[hsl(var(--color-primary))]/40 bg-[hsl(var(--color-primary))]/5 text-xs px-2.5 py-0.5 shrink-0"
+            className="text-[hsl(var(--color-foreground))] border-[hsl(var(--color-border))] bg-[hsl(var(--color-muted))] text-xs px-2.5 py-0.5 shrink-0"
           >
             {restaurant.kategori_makanan}
           </Badge>
@@ -67,7 +67,7 @@ function ExploreCard({ restaurant, index }: { restaurant: Restaurant; index: num
             <span>{restaurant.jam_buka} - {restaurant.jam_tutup}</span>
           </div>
         )}
-        <div className="font-semibold text-[hsl(var(--color-primary))]">
+        <div className="font-semibold text-[hsl(var(--color-foreground))]">
           {restaurant.range_harga}
         </div>
       </div>
@@ -92,7 +92,7 @@ function ExploreCard({ restaurant, index }: { restaurant: Restaurant; index: num
           {restaurant.link_lokasi && (
             <button
               onClick={() => window.open(restaurant.link_lokasi, '_blank')}
-              className="flex items-center justify-center gap-2 flex-1 py-2.5 glass text-sm font-medium text-[hsl(var(--color-foreground))] hover:glass-strong hover:text-[hsl(var(--color-primary))] transition-smooth"
+              className="flex items-center justify-center gap-2 flex-1 py-2.5 bg-[hsl(var(--color-background))] border border-[hsl(var(--color-border))] rounded-lg text-sm font-medium text-[hsl(var(--color-foreground))] hover:bg-[hsl(var(--color-muted))] transition-smooth"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -104,7 +104,7 @@ function ExploreCard({ restaurant, index }: { restaurant: Restaurant; index: num
           {restaurant.url && (
             <button
               onClick={() => window.open(restaurant.url, '_blank')}
-              className="flex items-center justify-center gap-2 flex-1 py-2.5 glass text-sm font-medium text-[hsl(var(--color-foreground))] hover:glass-strong hover:text-[hsl(var(--color-primary))] transition-smooth"
+              className="flex items-center justify-center gap-2 flex-1 py-2.5 bg-[hsl(var(--color-background))] border border-[hsl(var(--color-border))] rounded-lg text-sm font-medium text-[hsl(var(--color-foreground))] hover:bg-[hsl(var(--color-muted))] transition-smooth"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -156,10 +156,10 @@ export default function ExplorePage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Cari restoran, makanan, lokasi..."
-              className="w-full glass pl-10 pr-4 py-2.5 text-sm text-[hsl(var(--color-foreground))] placeholder:text-[hsl(var(--color-muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--color-primary))]/50 transition-smooth"
+              className="w-full bg-[hsl(var(--color-card))] border border-[hsl(var(--color-border))] rounded-lg pl-10 pr-4 py-2.5 text-sm text-[hsl(var(--color-foreground))] placeholder:text-[hsl(var(--color-muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--color-foreground))] transition-smooth"
             />
           </div>
-          <Button type="submit" className="bg-[hsl(var(--color-primary))] hover:bg-[hsl(var(--color-primary))]/90 hover:glow-primary transition-smooth">Cari</Button>
+          <Button type="submit" className="bg-[hsl(var(--color-foreground))] hover:bg-[hsl(var(--color-foreground))]/90 text-[hsl(var(--color-background))] transition-smooth">Cari</Button>
         </form>
 
         {/* Category filter */}
@@ -167,8 +167,8 @@ export default function ExplorePage() {
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
             <button
               onClick={() => { setCategory("all"); setPage(1); }}
-              className={`shrink-0 px-3 py-1.5 text-xs font-medium transition-smooth ${
-                category === "all" ? "glass-strong text-[hsl(var(--color-primary))] glow-primary" : "glass text-[hsl(var(--color-foreground))] hover:glass-card"
+              className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-smooth ${
+                category === "all" ? "bg-[hsl(var(--color-foreground))] text-[hsl(var(--color-background))]" : "bg-[hsl(var(--color-card))] border border-[hsl(var(--color-border))] text-[hsl(var(--color-foreground))] hover:bg-[hsl(var(--color-muted))]"
               }`}
             >
               Semua
@@ -177,8 +177,8 @@ export default function ExplorePage() {
               <button
                 key={c}
                 onClick={() => { setCategory(c); setPage(1); }}
-                className={`shrink-0 px-3 py-1.5 text-xs font-medium transition-smooth ${
-                  category === c ? "glass-strong text-[hsl(var(--color-primary))] glow-primary" : "glass text-[hsl(var(--color-foreground))] hover:glass-card"
+                className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-smooth ${
+                  category === c ? "bg-[hsl(var(--color-foreground))] text-[hsl(var(--color-background))]" : "bg-[hsl(var(--color-card))] border border-[hsl(var(--color-border))] text-[hsl(var(--color-foreground))] hover:bg-[hsl(var(--color-muted))]"
                 }`}
               >
                 {c}
@@ -215,7 +215,7 @@ export default function ExplorePage() {
               size="sm"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="glass hover:glass-strong transition-smooth"
+              className="bg-[hsl(var(--color-card))] border-[hsl(var(--color-border))] hover:bg-[hsl(var(--color-muted))] transition-smooth"
             >
               <ChevronLeft className="h-4 w-4" /> Prev
             </Button>
@@ -227,7 +227,7 @@ export default function ExplorePage() {
               size="sm"
               onClick={() => setPage((p) => Math.min(postsData.total_pages, p + 1))}
               disabled={page >= postsData.total_pages}
-              className="glass hover:glass-strong transition-smooth"
+              className="bg-[hsl(var(--color-card))] border-[hsl(var(--color-border))] hover:bg-[hsl(var(--color-muted))] transition-smooth"
             >
               Next <ChevronRight className="h-4 w-4" />
             </Button>
