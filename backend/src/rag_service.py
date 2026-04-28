@@ -1,320 +1,324 @@
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_aws import ChatBedrock
-from langchain_core.prompts import ChatPromptTemplate
-from qdrant_client import QdrantClient
-from fastapi import HTTPException
-from .config import get_settings
-from .utils import (
-    get_samarinda_time, get_time_context, check_operational_status, 
-    get_day_name_indonesian, extract_number_from_text, parse_future_time,
-    check_operational_status_at_time
-)
-from .models import RestaurantCard
+import logging
 from typing import List, Tuple
-import boto3
-import os
-import socket
 
-# Fix DNS resolution issues by using Google DNS
-def fix_dns_resolution():
-    """Configure DNS to use Google DNS for better resolution"""
-    try:
-        import dns.resolver
-        resolver = dns.resolver.Resolver()
-        resolver.nameservers = ['8.8.8.8', '1.1.1.1']  # Google DNS and Cloudflare DNS
-        dns.resolver.default_resolver = resolver
-        print("DNS resolver configured to use Google DNS (8.8.8.8)")
-    except ImportError:
-        print("Warning: dnspython not installed, using system DNS")
-    except Exception as e:
-        print(f"Warning: Could not configure DNS resolver: {e}")
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_openai import ChatOpenAI
+from qdrant_client import QdrantClient
+from qdrant_client.models import ScoredPoint
 
-# Apply DNS fix on module load
-fix_dns_resolution()
+from .config import get_settings
+from .models import RestaurantCard
+from .utils import (
+    check_operational_status,
+    check_operational_status_at_time,
+    extract_number_from_text,
+    get_day_name_indonesian,
+    get_samarinda_time,
+    get_time_context,
+    parse_future_time,
+)
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
+_MAX_RECOMMENDATIONS = 15
+_DEFAULT_RECOMMENDATIONS = 5
+
+_RETRIEVE_MULTIPLIER = 2
+_RETRIEVE_MINIMUM = 20
+
+
 class RAGService:
-    def __init__(self):
-        os.environ['AWS_ACCESS_KEY_ID'] = settings.aws_access_key_id
-        os.environ['AWS_SECRET_ACCESS_KEY'] = settings.aws_secret_access_key
-        os.environ['AWS_DEFAULT_REGION'] = settings.aws_region
-        
-        try:
-            # Initialize Bedrock client
-            print("Initializing AWS Bedrock client...")
-            bedrock_client = boto3.client(
-                service_name='bedrock-runtime',
-                region_name=settings.aws_region,
-                aws_access_key_id=settings.aws_access_key_id,
-                aws_secret_access_key=settings.aws_secret_access_key
-            )
-            
-            # Initialize LLM
-            self.llm = ChatBedrock(
-                client=bedrock_client,
-                model_id=settings.llm_model,
-                model_kwargs={
-                    "temperature": 0.7,
-                    "top_p": 0.9,
-                    "max_tokens": 2000,
-                }
-            )
-            print("AWS Bedrock client initialized")
-        except Exception as e:
-            print(f"Warning: Failed to initialize AWS Bedrock: {e}")
-            print("LLM features will not be available")
-            self.llm = None
-        
-        try:
-            # Initialize HuggingFace embeddings 
-            print("Loading HuggingFace embeddings locally...")
-            self.embeddings = HuggingFaceEmbeddings(
-                model_name=settings.embedding_model,
-                model_kwargs={'device': 'cpu'},
-                encode_kwargs={'normalize_embeddings': True}
-            )
-            print("Embeddings loaded successfully")
-        except Exception as e:
-            print(f"Error loading embeddings: {e}")
-            raise
-        
-        try:
-            # Initialize Qdrant
-            print("Connecting to Qdrant...")
-            self.qdrant_client = QdrantClient(
-                url=settings.qdrant_url,
-                api_key=settings.qdrant_api_key,
-                timeout=10
-            )
-            # Test connection
-            self.qdrant_client.get_collections()
-            print("Qdrant connection successful")
-        except Exception as e:
-            print(f"Error connecting to Qdrant: {e}")
-            print("Please check your internet connection and Qdrant credentials")
-            raise ConnectionError(f"Failed to connect to Qdrant: {e}")
-    
-    def retrieve_restaurants(self, query: str, top_k: int = 10) -> List[dict]:
-        """Retrieve relevant restaurants from Qdrant using FREE embeddings"""
-        try:
-            # Generate query embedding 
-            query_embedding = self.embeddings.embed_query(query)
-            
-            # Search in Qdrant (using query_points for newer API)
-            try:
-                search_results = self.qdrant_client.search(
-                    collection_name=settings.qdrant_collection_name,
-                    query_vector=query_embedding,
-                    limit=top_k,
-                )
-            except AttributeError:
-                # Fallback for older API
-                from qdrant_client.models import SearchRequest
-                search_results = self.qdrant_client.query_points(
-                    collection_name=settings.qdrant_collection_name,
-                    query=query_embedding,
-                    limit=top_k,
-                ).points
-            
-            return [hit.payload for hit in search_results]
-        except Exception as e:
-            print(f"Error retrieving restaurants: {e}")
-            raise ConnectionError(f"Failed to retrieve data from Qdrant: {e}")
-    
-    def filter_by_operational_status(self, restaurants: List[dict], target_time=None) -> List[dict]:
-        """Filter and annotate restaurants with operational status"""
-        filtered = []
-        
+    """
+    RAG untuk rekomendasi restoran.
+    """
+
+    def __init__(self) -> None:
+        self._embeddings = self._init_embeddings()
+        self._llm = self._init_llm()
+        self._qdrant = self._init_qdrant()
+
+
+    @staticmethod
+    def _init_embeddings() -> "OpenAIEmbeddings":
+        from langchain_openai import OpenAIEmbeddings
+        logger.info("Loading OpenAI embeddings: text-embedding-3-large")
+        embeddings = OpenAIEmbeddings(
+            model=settings.embedding_model,
+            openai_api_key=settings.openai_api_key,
+        )
+        logger.info("Embeddings loaded")
+        return embeddings
+
+    @staticmethod
+    def _init_llm() -> ChatOpenAI:
+        logger.info("Initializing OpenAI LLM: %s", settings.llm_model)
+        return ChatOpenAI(
+            model=settings.llm_model,
+            temperature=settings.llm_temperature,
+            max_tokens=settings.llm_max_tokens,
+            openai_api_key=settings.openai_api_key,
+        )
+
+    @staticmethod
+    def _init_qdrant() -> QdrantClient:
+        logger.info("Connecting to Qdrant: %s", settings.qdrant_url)
+        client = QdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key,
+            timeout=10,
+        )
+
+        client.get_collections()
+        logger.info("Qdrant connected")
+        return client
+
+
+    def _retrieve(self, query: str, top_k: int) -> List[dict]:
+        """Cari restoran relevan di Qdrant menggunakan embedding query."""
+        vector = self._embeddings.embed_query(query)
+        hits: List[ScoredPoint] = self._qdrant.search(
+            collection_name=settings.qdrant_collection_name,
+            query_vector=vector,
+            limit=top_k,
+        )
+        return [hit.payload for hit in hits]
+
+
+    @staticmethod
+    def _annotate_status(restaurants: List[dict], target_time=None) -> List[dict]:
+        """
+        Tambahkan field `status_operasional` ke setiap restoran.
+        """
+        open_list: List[dict] = []
+        closed_list: List[dict] = []
+
         for resto in restaurants:
             if target_time:
-                # Check status for future time
                 status = check_operational_status_at_time(
-                    resto.get('jam_buka', 'Unknown'),
-                    resto.get('jam_tutup', 'Unknown'),
-                    resto.get('hari_operasional', 'Unknown'),
-                    target_time
+                    resto.get("jam_buka", "Unknown"),
+                    resto.get("jam_tutup", "Unknown"),
+                    resto.get("hari_operasional", "Unknown"),
+                    target_time,
                 )
             else:
-                # Check current status
                 status = check_operational_status(
-                    resto.get('jam_buka', 'Unknown'),
-                    resto.get('jam_tutup', 'Unknown'),
-                    resto.get('hari_operasional', 'Unknown')
+                    resto.get("jam_buka", "Unknown"),
+                    resto.get("jam_tutup", "Unknown"),
+                    resto.get("hari_operasional", "Unknown"),
                 )
-            resto['status_operasional'] = status
-            
-            # Prioritize open/will-be-open restaurants
-            if 'Buka' in status or 'Akan Buka' in status:
-                filtered.insert(0, resto)
+
+            resto = {**resto, "status_operasional": status}
+
+            if "Buka" in status:
+                open_list.append(resto)
             else:
-                filtered.append(resto)
-        
-        return filtered
-    
-    def generate_response(self, user_query: str, conversation_history: List[dict]) -> Tuple[str, List[RestaurantCard]]:
-        """Generate response using RAG with FREE embeddings"""
-        # Check if LLM is available
-        if self.llm is None:
-            raise ConnectionError("LLM service is not available. Please check your internet connection and AWS credentials.")
-        
-        # Extract requested number of recommendations (with typo tolerance)
-        requested_count = extract_number_from_text(user_query)
-        if requested_count is None:
-            requested_count = 5  # Default
-        else:
-            requested_count = min(requested_count, 15)  # Cap at 15
-        
-        # Check for future time request
-        future_time_info = parse_future_time(user_query)
-        if future_time_info:
-            target_time, time_description = future_time_info
-            current_time = target_time
-            time_context = time_description
-            day_name = target_time.strftime('%A')
+                closed_list.append(resto)
+
+        return open_list + closed_list
+
+    @staticmethod
+    def _build_system_prompt(
+        requested_count: int,
+        time_context: str,
+        day_name: str,
+        current_time_str: str,
+        is_future: bool,
+        context_text: str,
+    ) -> str:
+        future_note = (
+            "\n- CATATAN: Ini adalah rekomendasi untuk WAKTU MENDATANG"
+            if is_future
+            else ""
+        )
+        priority_note = (
+            "Prioritaskan tempat yang AKAN BUKA pada waktu tersebut"
+            if is_future
+            else "Prioritaskan tempat yang BUKA SEKARANG"
+        )
+
+        return f"""Kamu adalah asisten chatbot rekomendasi tempat makan di Samarinda yang ramah.
+
+KONTEKS WAKTU:
+- Jam   : {current_time_str} WITA
+- Hari  : {day_name}
+- Waktu : {time_context}{future_note}
+
+INSTRUKSI:
+1. Berikan TEPAT {requested_count} rekomendasi — tidak lebih, tidak kurang.
+2. {priority_note}.
+3. Jika tempat tutup, sebutkan kapan akan buka.
+4. Sesuaikan dengan konteks waktu (sarapan/siang/malam/cemilan).
+5. Pertimbangkan permintaan khusus pengguna (budget, jenis makanan, fasilitas).
+6. Gunakan Bahasa Indonesia yang ramah dan natural.
+
+FORMAT WAJIB (gunakan persis):
+[Sapaan singkat 1 kalimat]
+
+**1. Nama Tempat**
+[Deskripsi 2–3 kalimat: kenapa cocok, menu andalan, harga, status buka/tutup]
+
+**2. Nama Tempat**
+[Deskripsi 2–3 kalimat]
+
+... dst hingga {requested_count} rekomendasi ...
+
+[Penutup 1 kalimat]
+
+DATA RESTORAN YANG TERSEDIA:
+{context_text}
+"""
+
+    @staticmethod
+    def _format_context(restaurants: List[dict]) -> str:
+        """Format data restoran menjadi teks konteks untuk LLM."""
+        lines = []
+        for i, r in enumerate(restaurants, 1):
+            menu = ", ".join(r.get("menu_andalan", [])[:3]) or "Tidak tersedia"
+            fasilitas = ", ".join(r.get("fasilitas", [])) or "Tidak tersedia"
+            lines.append(
+                f"{i}. {r.get('nama_tempat', 'Unknown')}\n"
+                f"   Kategori : {r.get('kategori_makanan', 'Unknown')}\n"
+                f"   Harga    : {r.get('range_harga', 'Unknown')}\n"
+                f"   Lokasi   : {r.get('lokasi', 'Unknown')}\n"
+                f"   Status   : {r.get('status_operasional', 'Unknown')}\n"
+                f"   Jam      : {r.get('jam_buka', '?')} – {r.get('jam_tutup', '?')}\n"
+                f"   Menu     : {menu}\n"
+                f"   Fasilitas: {fasilitas}\n"
+                f"   Deskripsi: {r.get('ringkasan', '-')}\n"
+            )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _build_messages(
+        system_prompt: str,
+        conversation_history: List[dict],
+        user_query: str,
+    ) -> list:
+        """
+        Bangun daftar pesan untuk LLM dengan menyertakan riwayat percakapan.
+        """
+        messages = [SystemMessage(content=system_prompt)]
+
+        # Sertakan 4 pesan terakhir sebagai konteks percakapan
+        for msg in conversation_history[-4:]:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if role == "user":
+                messages.append(HumanMessage(content=content))
+            elif role == "assistant":
+                messages.append(AIMessage(content=content))
+
+        messages.append(HumanMessage(content=user_query))
+        return messages
+
+
+    @staticmethod
+    def _make_cards(
+        restaurants: List[dict], max_cards: int
+    ) -> List[RestaurantCard]:
+        """
+        Buat kartu restoran untuk frontend.
+
+        Jika jumlah restoran yang buka kurang dari yang diminta,
+        tambahkan yang tutup sebagai fallback agar kartu tidak kosong.
+        """
+        cards: List[RestaurantCard] = []
+
+        for resto in restaurants:
+            if len(cards) >= max_cards:
+                break
+            cards.append(
+                RestaurantCard(
+                    nama_tempat=resto.get("nama_tempat", "Unknown"),
+                    ringkasan=resto.get("ringkasan", "Tidak ada deskripsi"),
+                    kategori_makanan=resto.get("kategori_makanan", "Unknown"),
+                    range_harga=resto.get("range_harga", "Unknown"),
+                    link_lokasi=resto.get("link_lokasi", "#"),
+                    link_instagram=resto.get("link_instagram", "#"),
+                    jam_buka=resto.get("jam_buka"),
+                    jam_tutup=resto.get("jam_tutup"),
+                    status_operasional=resto.get("status_operasional", "Unknown"),
+                    menu_andalan=resto.get("menu_andalan", [])[:5],
+                    fasilitas=resto.get("fasilitas", []),
+                )
+            )
+
+        return cards
+
+    def generate_response(
+        self,
+        user_query: str,
+        conversation_history: List[dict],
+    ) -> Tuple[str, List[RestaurantCard]]:
+        """
+        Proses query pengguna dan kembalikan (teks_respons, kartu_restoran).
+
+        Alur:
+        1. Tentukan jumlah rekomendasi yang diminta (default 5, maks 15).
+        2. Deteksi referensi waktu mendatang ("besok pagi", "jam 7", dll.).
+        3. Ambil kandidat restoran dari Qdrant.
+        4. Anotasi & urutkan berdasarkan status operasional.
+        5. Bangun prompt + riwayat percakapan, kirim ke OpenAI.
+        6. Buat kartu restoran sesuai jumlah yang diminta.
+        """
+        # 1. Jumlah rekomendasi
+        requested_count = min(
+            extract_number_from_text(user_query) or _DEFAULT_RECOMMENDATIONS,
+            _MAX_RECOMMENDATIONS,
+        )
+
+        # 2. Waktu (sekarang atau mendatang)
+        future = parse_future_time(user_query)
+        if future:
+            target_time, time_context = future
+            day_name = _DAY_ID_MAP.get(target_time.strftime("%A"), target_time.strftime("%A"))
             is_future = True
         else:
-            current_time = get_samarinda_time()
+            target_time = None
             time_context = get_time_context()
             day_name = get_day_name_indonesian()
             is_future = False
-        
-        # Enhance query with time context
-        enhanced_query = f"{user_query} (Waktu: {time_context}, Hari: {day_name}, Jam: {current_time.strftime('%H:%M')})"
-        
-        # Retrieve relevant restaurants (fetch more to ensure enough after filtering)
-        retrieve_count = max(requested_count * 2, 20)
-        try:
-            retrieved_restaurants = self.retrieve_restaurants(enhanced_query, top_k=retrieve_count)
-        except ConnectionError as e:
-            raise HTTPException(status_code=503, detail=str(e))
-        
-        # Filter by operational status (current or future)
-        if is_future:
-            filtered_restaurants = self.filter_by_operational_status(retrieved_restaurants, target_time=target_time)
-        else:
-            filtered_restaurants = self.filter_by_operational_status(retrieved_restaurants)
-        
-        # Prepare context for LLM (show more than requested for better context)
-        context_count = min(requested_count + 5, len(filtered_restaurants))
-        context_text = self._format_restaurant_context(filtered_restaurants[:context_count])
-        
-        # Create prompt with dynamic instructions
-        system_prompt = f"""Kamu adalah asisten chatbot rekomendasi tempat makan di Samarinda yang ramah dan membantu.
 
-KONTEKS WAKTU:
-- Waktu: {{current_time}}
-- Hari: {{day_name}}
-- Konteks Makan: {{time_context}}
-{"- CATATAN: Ini adalah rekomendasi untuk WAKTU MENDATANG" if is_future else ""}
+        current_time = target_time or get_samarinda_time()
 
-INSTRUKSI:
-1. User meminta {requested_count} rekomendasi tempat makan
-2. Berikan TEPAT {requested_count} rekomendasi (tidak lebih, tidak kurang)
-3. {"Prioritaskan tempat yang AKAN BUKA pada waktu tersebut" if is_future else "Prioritaskan tempat yang BUKA SEKARANG"}
-4. Jika tempat tutup, informasikan kapan akan buka
-5. Pertimbangkan jam operasional dalam rekomendasi
-6. Sesuaikan rekomendasi dengan konteks waktu (sarapan/makan siang/makan malam/cemilan)
-7. Jika user punya request khusus (budget, jenis makanan, lokasi, fasilitas), pertimbangkan dalam rekomendasi
-8. Jelaskan mengapa tempat tersebut cocok untuk user
-9. Gunakan bahasa Indonesia yang ramah dan natural
-
-FORMAT JAWABAN YANG WAJIB:
-- Mulai dengan salam singkat dan intro (1-2 kalimat)
-- Gunakan numbering yang jelas: **1. Nama Tempat**, **2. Nama Tempat**, dst
-- Setiap rekomendasi dalam paragraf terpisah dengan line break
-- Setiap paragraf rekomendasi maksimal 2-3 kalimat yang padat
-- Akhiri dengan kalimat penutup yang ramah (1 kalimat)
-
-CONTOH FORMAT:
-Halo! Saya punya {requested_count} rekomendasi tempat makan siang yang enak di Samarinda:
-
-**1. Nama Tempat Pertama**
-Tempat ini cocok untuk makan siang karena [alasan singkat]. Menu andalannya [sebutkan 1-2 menu] dan harganya [range harga].
-
-**2. Nama Tempat Kedua**  
-[Deskripsi singkat 2-3 kalimat]
-
-Semua tempat ini buka sekarang dan siap melayani. Selamat menikmati!
-
-INFORMASI TEMPAT MAKAN:
-{{context}}
-
-PENTING: Gunakan format dengan numbering bold (**1. Nama**) dan pisahkan setiap rekomendasi dengan line break. Jangan tulis dalam satu paragraf panjang!
-"""
-        
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", "{query}")
-        ])
-        
-        # Add conversation history
-        messages = []
-        for msg in conversation_history[-4:]:  # Last 4 messages for context
-            messages.append((msg['role'], msg['content']))
-        messages.append(("human", user_query))
-        
-        # Generate response
-        chain = prompt | self.llm
-        response = chain.invoke({
-            "current_time": current_time.strftime('%H:%M'),
-            "day_name": day_name,
-            "time_context": time_context,
-            "context": context_text,
-            "query": user_query
-        })
-        
-        # Create restaurant cards (match requested count)
-        restaurant_cards = self._create_restaurant_cards(
-            filtered_restaurants[:requested_count], 
-            max_cards=requested_count
+        # 3. Retrieval
+        retrieve_count = max(requested_count * _RETRIEVE_MULTIPLIER, _RETRIEVE_MINIMUM)
+        enhanced_query = (
+            f"{user_query} "
+            f"(Waktu: {time_context}, Hari: {day_name}, "
+            f"Jam: {current_time.strftime('%H:%M')})"
         )
-        
-        return response.content, restaurant_cards
-    
-    def _format_restaurant_context(self, restaurants: List[dict]) -> str:
-        """Format restaurant data for LLM context"""
-        context_parts = []
-        for i, resto in enumerate(restaurants, 1):
-            menu = ', '.join(resto.get('menu_andalan', [])[:3]) if resto.get('menu_andalan') else 'Tidak tersedia'
-            fasilitas = ', '.join(resto.get('fasilitas', [])) if resto.get('fasilitas') else 'Tidak tersedia'
-            
-            context_parts.append(f"""
-{i}. {resto.get('nama_tempat', 'Unknown')}
-   - Kategori: {resto.get('kategori_makanan', 'Unknown')}
-   - Harga: {resto.get('range_harga', 'Unknown')}
-   - Lokasi: {resto.get('lokasi', 'Unknown')}
-   - Status: {resto.get('status_operasional', 'Unknown')}
-   - Jam: {resto.get('jam_buka', 'Unknown')} - {resto.get('jam_tutup', 'Unknown')}
-   - Menu Andalan: {menu}
-   - Fasilitas: {fasilitas}
-   - Deskripsi: {resto.get('ringkasan', 'Tidak tersedia')}
-""")
-        
-        return "\n".join(context_parts)
-    
-    def _create_restaurant_cards(self, restaurants: List[dict], max_cards: int = 3) -> List[RestaurantCard]:
-        """Create restaurant cards for frontend"""
-        cards = []
-        for resto in restaurants:
-            # Include open, soon-to-open, or will-be-open restaurants
-            status = resto.get('status_operasional', '')
-            if 'Buka' in status or 'Akan Buka' in status:
-                cards.append(RestaurantCard(
-                    nama_tempat=resto.get('nama_tempat', 'Unknown'),
-                    ringkasan=resto.get('ringkasan', 'Tidak ada deskripsi'),
-                    kategori_makanan=resto.get('kategori_makanan', 'Unknown'),
-                    range_harga=resto.get('range_harga', 'Unknown'),
-                    link_lokasi=resto.get('link_lokasi', '#'),
-                    link_instagram=resto.get('link_instagram', '#'),
-                    jam_buka=resto.get('jam_buka'),
-                    jam_tutup=resto.get('jam_tutup'),
-                    status_operasional=status,
-                    menu_andalan=resto.get('menu_andalan', [])[:5],
-                    fasilitas=resto.get('fasilitas', [])
-                ))
-                
-                if len(cards) >= max_cards:
-                    break
-        
-        return cards  
+        raw_results = self._retrieve(enhanced_query, top_k=retrieve_count)
+
+        # 4. Anotasi & sortir
+        annotated = self._annotate_status(raw_results, target_time=target_time)
+
+        # 5. Generasi teks
+        context_text = self._format_context(annotated[: requested_count + 5])
+        system_prompt = self._build_system_prompt(
+            requested_count=requested_count,
+            time_context=time_context,
+            day_name=day_name,
+            current_time_str=current_time.strftime("%H:%M"),
+            is_future=is_future,
+            context_text=context_text,
+        )
+        messages = self._build_messages(system_prompt, conversation_history, user_query)
+        response = self._llm.invoke(messages)
+
+        # 6. Kartu
+        cards = self._make_cards(annotated[:requested_count], max_cards=requested_count)
+
+        return response.content, cards
+
+_DAY_ID_MAP = {
+    "Monday": "Senin",
+    "Tuesday": "Selasa",
+    "Wednesday": "Rabu",
+    "Thursday": "Kamis",
+    "Friday": "Jumat",
+    "Saturday": "Sabtu",
+    "Sunday": "Minggu",
+}

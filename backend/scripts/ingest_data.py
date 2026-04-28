@@ -1,176 +1,170 @@
-"""
-Data ingestion using FREE HuggingFace embeddings (no API limits!)
-"""
-import pandas as pd
-import os
-from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
-from langchain_huggingface import HuggingFaceEmbeddings
-from config import get_settings
-from tqdm import tqdm
 import ast
+import logging
+import sys
+from pathlib import Path
+
+import pandas as pd
+from langchain_huggingface import HuggingFaceEmbeddings
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, PointStruct, VectorParams
+from tqdm import tqdm
+from langchain_openai import OpenAIEmbeddings
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.config import get_settings  # noqa: E402
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-def parse_list_field(value):
-    """Parse string representation of list to actual list"""
-    if pd.isna(value) or value == '' or value == '[]':
+BATCH_SIZE = 20
+
+DATA_PATH = Path(__file__).parent.parent / "data" / "cleaned_enhanced_data_2.csv"
+
+
+def _parse_list(value) -> list:
+    """Parse string representasi list Python menjadi list nyata."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return []
+    if isinstance(value, list):
+        return value
+    text = str(value).strip()
+    if not text or text in ("[]", "nan"):
         return []
     try:
-        return ast.literal_eval(value) if isinstance(value, str) else value
-    except:
+        parsed = ast.literal_eval(text)
+        return parsed if isinstance(parsed, list) else []
+    except (ValueError, SyntaxError):
         return []
 
-def create_embedding_text(row):
-    """Create rich text for embedding"""
+
+def _build_embedding_text(row: pd.Series) -> str:
+    """
+    Gabungkan field-field penting menjadi satu string untuk embedding.
+    Urutan field memengaruhi bobot semantik — field paling relevan diletakkan di awal.
+    """
     parts = [
         f"Nama: {row['nama_tempat']}",
         f"Kategori: {row['kategori_makanan']}",
         f"Tipe: {row['tipe_tempat']}",
         f"Harga: {row['range_harga']}",
-        f"Lokasi: {row['lokasi']}",
         f"Ringkasan: {row['ringkasan']}",
+        f"Lokasi: {row['lokasi']}",
     ]
-    
-    if row['menu_andalan']:
+    if row["menu_andalan"]:
         parts.append(f"Menu: {', '.join(row['menu_andalan'])}")
-    
-    if row['context']:
+    if row["context"]:
         parts.append(f"Waktu: {', '.join(row['context'])}")
-    
-    if row['tags']:
+    if row["tags"]:
         parts.append(f"Tags: {', '.join(row['tags'])}")
-    
-    if row['jam_buka'] != 'Unknown':
+    if str(row["jam_buka"]).lower() not in ("unknown", "nan", ""):
         parts.append(f"Jam Buka: {row['jam_buka']} - {row['jam_tutup']}")
-    
     return " | ".join(parts)
 
-def main():
-    print("="*80)
-    print("  FREE EMBEDDING VERSION - Using HuggingFace (Local, No API Limits!)")
-    print("="*80)
-    
-    print("\nLoading data...")
-    df = pd.read_csv('cleaned_enhanced_data_2.csv')
-    
-    # Parse list fields
-    df['menu_andalan'] = df['menu_andalan'].apply(parse_list_field)
-    df['fasilitas'] = df['fasilitas'].apply(parse_list_field)
-    df['context'] = df['context'].apply(parse_list_field)
-    df['tags'] = df['tags'].apply(parse_list_field)
-    
-    # Fill NaN values
-    df = df.fillna('Unknown')
-    
-    print(f"✓ Loaded {len(df)} records")
-    
-    # Initialize HuggingFace embeddings (FREE & LOCAL!)
-    print("\nInitializing HuggingFace embeddings (downloading model first time)...")
-    embeddings = HuggingFaceEmbeddings(
-        model_name=settings.embedding_model,
-        model_kwargs={'device': 'cpu'},  # Use 'cuda' if you have GPU
-        encode_kwargs={'normalize_embeddings': True}
+
+def _row_to_payload(row: pd.Series, idx: int) -> dict:
+    """Konversi baris DataFrame ke dict payload Qdrant."""
+    return {
+        "nama_tempat": str(row["nama_tempat"]),
+        "lokasi": str(row["lokasi"]),
+        "link_lokasi": str(row.get("link_lokasi", "")),
+        "link_instagram": str(row.get("url", "")),
+        "kategori_makanan": str(row["kategori_makanan"]),
+        "tipe_tempat": str(row["tipe_tempat"]),
+        "range_harga": str(row["range_harga"]),
+        "menu_andalan": row["menu_andalan"],
+        "fasilitas": row["fasilitas"],
+        "jam_buka": str(row["jam_buka"]),
+        "jam_tutup": str(row["jam_tutup"]),
+        "hari_operasional": str(row.get("hari_operasional", "Unknown")),
+        "context": row["context"],
+        "ringkasan": str(row["ringkasan"]),
+        "tags": row["tags"],
+        "kota": str(row.get("kota", "")),
+        "kecamatan": str(row.get("kecamatan", "")),
+    }
+
+
+def main() -> None:
+    logger.info("=== Food Finder — Data Ingestion ===")
+
+    # 1. Muat data
+    logger.info("Loading data: %s", DATA_PATH)
+    if not DATA_PATH.exists():
+        logger.error("File not found: %s", DATA_PATH)
+        sys.exit(1)
+
+    df = pd.read_csv(DATA_PATH)
+    for col in ("menu_andalan", "fasilitas", "context", "tags", "hari_operasional"):
+        df[col] = df[col].apply(_parse_list)
+    df = df.fillna("Unknown")
+    logger.info("Loaded %d records", len(df))
+
+    # 2. Inisialisasi embedding     
+    logger.info("Loading OpenAI embeddings: text-embedding-3-large")
+    embeddings = OpenAIEmbeddings(
+        model=settings.embedding_model,
+        openai_api_key=settings.openai_api_key,
     )
-    print("✓ Embeddings model loaded")
     
-    # Initialize Qdrant
-    print("\nConnecting to Qdrant...")
-    client = QdrantClient(
-        url=settings.qdrant_url,
-        api_key=settings.qdrant_api_key,
-    )
-    print("✓ Connected to Qdrant")
-    
-    # Create collection
-    print("\nCreating collection...")
-    try:
-        client.delete_collection(collection_name=settings.qdrant_collection_name)
-        print("  Existing collection deleted")
-    except Exception as e:
-        print(f"  No existing collection to delete")
-    
-    # HuggingFace model uses 384 dimensions
+    # 3. Koneksi Qdrant
+    logger.info("Connecting to Qdrant: %s", settings.qdrant_url)
+    client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
+
+    # 4. Buat ulang koleksi (drop jika sudah ada)
+    collection_name = settings.qdrant_collection_name
+    existing = [c.name for c in client.get_collections().collections]
+    if collection_name in existing:
+        logger.warning("Collection '%s' already exists — recreating", collection_name)
+        client.delete_collection(collection_name)
+
     client.create_collection(
-        collection_name=settings.qdrant_collection_name,
-        vectors_config=VectorParams(size=settings.embedding_dimensions, distance=Distance.COSINE),
+        collection_name=collection_name,
+        vectors_config=VectorParams(
+            size=settings.embedding_dimensions,
+            distance=Distance.COSINE,
+        ),
     )
-    print(f"✓ Collection created (dimensions: {settings.embedding_dimensions})")
-    
-    # Prepare and upload data
-    print(f"\nGenerating embeddings and uploading to Qdrant...")
-    print("This will take ~5-10 minutes for {len(df)} records (all local, no API limits!)")
-    
-    points = []
-    batch_size = 10
-    
-    for idx, row in tqdm(df.iterrows(), total=len(df), desc="Processing records"):
+    logger.info(
+        "Collection '%s' created (dim=%d)", collection_name, settings.embedding_dimensions
+    )
+
+    # 5. Generate embedding & upload secara batch
+    logger.info("Generating embeddings and uploading (batch=%d)...", BATCH_SIZE)
+    batch: list[PointStruct] = []
+    errors = 0
+
+    for idx, row in tqdm(df.iterrows(), total=len(df), desc="Ingesting"):
         try:
-            # Create embedding text
-            embedding_text = create_embedding_text(row)
-            
-            # Generate embedding (LOCAL - NO API CALL!)
-            embedding = embeddings.embed_query(embedding_text)
-            
-            # Prepare payload
-            payload = {
-                'nama_tempat': str(row['nama_tempat']),
-                'lokasi': str(row['lokasi']),
-                'link_lokasi': str(row['link_lokasi']),
-                'link_instagram': str(row['url']),
-                'kategori_makanan': str(row['kategori_makanan']),
-                'tipe_tempat': str(row['tipe_tempat']),
-                'range_harga': str(row['range_harga']),
-                'menu_andalan': row['menu_andalan'],
-                'fasilitas': row['fasilitas'],
-                'jam_buka': str(row['jam_buka']),
-                'jam_tutup': str(row['jam_tutup']),
-                'hari_operasional': str(row['hari_operasional']),
-                'context': row['context'],
-                'ringkasan': str(row['ringkasan']),
-                'tags': row['tags'],
-                'kota': str(row['kota']),
-                'kecamatan': str(row['kecamatan']),
-            }
-            
-            points.append(PointStruct(
-                id=int(idx),
-                vector=embedding,
-                payload=payload
-            ))
-            
-            # Upload in batches
-            if len(points) >= batch_size:
-                client.upsert(
-                    collection_name=settings.qdrant_collection_name,
-                    points=points
-                )
-                points = []
-        
-        except Exception as e:
-            print(f"\nError processing row {idx}: {e}")
-            continue
-    
-    # Upload remaining points
-    if points:
-        client.upsert(
-            collection_name=settings.qdrant_collection_name,
-            points=points
-        )
-    
-    print(f"\n{'='*80}")
-    print(f"✓ Successfully uploaded {len(df)} records to Qdrant!")
-    print(f"{'='*80}")
-    
-    # Verify
-    collection_info = client.get_collection(settings.qdrant_collection_name)
-    print(f"\nCollection info:")
-    print(f"  - Name: {settings.qdrant_collection_name}")
-    print(f"  - Points count: {collection_info.points_count}")
-    print(f"  - Vector size: {settings.embedding_dimensions}")
-    print(f"  - Embedding model: {settings.embedding_model} (FREE & LOCAL!)")
-    
-    print("\n✓ All done! No API costs, no throttling, completely free!")
+            text = _build_embedding_text(row)
+            vector = embeddings.embed_query(text)
+            batch.append(
+                PointStruct(id=int(idx), vector=vector, payload=_row_to_payload(row, idx))
+            )
+
+            if len(batch) >= BATCH_SIZE:
+                client.upsert(collection_name=collection_name, points=batch)
+                batch.clear()
+
+        except Exception as exc:
+            logger.warning("Skipping row %d: %s", idx, exc)
+            errors += 1
+
+    # Upload sisa batch
+    if batch:
+        client.upsert(collection_name=collection_name, points=batch)
+
+    # 6. Verifikasi
+    info = client.get_collection(collection_name)
+    logger.info(
+        "Done! Uploaded %d points (%d errors). Collection size: %d",
+        len(df) - errors,
+        errors,
+        info.points_count,
+    )
+
 
 if __name__ == "__main__":
     main()

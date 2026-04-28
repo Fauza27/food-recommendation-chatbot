@@ -1,239 +1,283 @@
-from datetime import datetime, timedelta
-import pytz
 import re
-from typing import Tuple, Optional
+from datetime import datetime, timedelta
+from typing import Optional, Tuple
+
+import pytz
+
+_WITA_TZ = pytz.timezone("Asia/Makassar")
+
+_DAY_ID = {
+    "Monday": "Senin",
+    "Tuesday": "Selasa",
+    "Wednesday": "Rabu",
+    "Thursday": "Kamis",
+    "Friday": "Jumat",
+    "Saturday": "Sabtu",
+    "Sunday": "Minggu",
+}
+
 
 def get_samarinda_time() -> datetime:
-    """Get current time in Samarinda, Indonesia (WITA - UTC+8)"""
-    samarinda_tz = pytz.timezone('Asia/Makassar')  # WITA timezone
-    return datetime.now(samarinda_tz)
+    """Waktu saat ini di zona WITA (UTC+8)."""
+    return datetime.now(_WITA_TZ)
+
 
 def get_time_context() -> str:
-    """Determine meal time context based on current time"""
-    current_time = get_samarinda_time()
-    hour = current_time.hour
-    
+    """Konteks makan berdasarkan jam sekarang."""
+    hour = get_samarinda_time().hour
     if 5 <= hour < 10:
         return "sarapan"
-    elif 10 <= hour < 15:
+    if 10 <= hour < 15:
         return "makan siang"
-    elif 15 <= hour < 18:
+    if 15 <= hour < 18:
         return "cemilan sore"
-    elif 18 <= hour < 22:
-        return "makan malam"
-    else:
-        return "makan malam"
+    return "makan malam"
 
-def parse_time(time_str: str) -> Tuple[int, int]:
-    """Parse time string (HH:MM) to hour and minute"""
-    if time_str == 'Unknown' or not time_str:
-        return None, None
-    try:
-        hour, minute = map(int, time_str.split(':'))
-        return hour, minute
-    except:
-        return None, None
-
-def check_operational_status(jam_buka: str, jam_tutup: str, hari_operasional: str) -> str:
-    """Check if restaurant is currently open"""
-    current_time = get_samarinda_time()
-    current_hour = current_time.hour
-    current_minute = current_time.minute
-    current_day = current_time.strftime('%A')
-    
-    # Check if open today
-    if hari_operasional != 'Unknown' and 'Setiap Hari' not in hari_operasional:
-        if current_day not in hari_operasional:
-            return "Tutup (Tidak beroperasi hari ini)"
-    
-    # Parse operating hours
-    open_hour, open_minute = parse_time(jam_buka)
-    close_hour, close_minute = parse_time(jam_tutup)
-    
-    if open_hour is None or close_hour is None:
-        return "Jam operasional tidak tersedia"
-    
-    # Convert to minutes for easier comparison
-    current_minutes = current_hour * 60 + current_minute
-    open_minutes = open_hour * 60 + open_minute
-    close_minutes = close_hour * 60 + close_minute
-    
-    # Handle overnight operations
-    if close_minutes < open_minutes:
-        close_minutes += 24 * 60
-        if current_minutes < open_minutes:
-            current_minutes += 24 * 60
-    
-    if open_minutes <= current_minutes < close_minutes:
-        return "Buka Sekarang"
-    elif current_minutes < open_minutes:
-        hours_until_open = (open_minutes - current_minutes) // 60
-        if hours_until_open == 0:
-            minutes_until_open = open_minutes - current_minutes
-            return f"Buka dalam {minutes_until_open} menit"
-        return f"Buka dalam {hours_until_open} jam"
-    else:
-        return "Tutup"
 
 def get_day_name_indonesian() -> str:
-    """Get current day name in Indonesian"""
-    current_time = get_samarinda_time()
-    day_map = {
-        'Monday': 'Senin',
-        'Tuesday': 'Selasa',
-        'Wednesday': 'Rabu',
-        'Thursday': 'Kamis',
-        'Friday': 'Jumat',
-        'Saturday': 'Sabtu',
-        'Sunday': 'Minggu'
-    }
-    return day_map.get(current_time.strftime('%A'), current_time.strftime('%A'))
+    """Nama hari saat ini dalam Bahasa Indonesia."""
+    eng = get_samarinda_time().strftime("%A")
+    return _DAY_ID.get(eng, eng)
+
+
+def _parse_time(time_str: str) -> Optional[Tuple[int, int]]:
+    """
+    Parse 'HH:MM' → (hour, minute).
+    Mengembalikan None jika format tidak valid atau nilai 'Unknown'.
+    """
+    if not time_str or time_str.strip().lower() in ("unknown", ""):
+        return None
+    try:
+        parts = time_str.strip().split(":")
+        return int(parts[0]), int(parts[1])
+    except (ValueError, IndexError):
+        return None
+
+
+def _to_minutes(hour: int, minute: int) -> int:
+    return hour * 60 + minute
+
+
+def _compute_status(
+    open_hm: Tuple[int, int],
+    close_hm: Tuple[int, int],
+    current_hm: Tuple[int, int],
+    open_label: str = "Buka Sekarang",
+    closed_label: str = "Tutup",
+) -> str:
+    """
+    Hitung status berdasarkan pasangan (hour, minute).
+    """
+    open_m = _to_minutes(*open_hm)
+    close_m = _to_minutes(*close_hm)
+    raw_cur_m = _to_minutes(*current_hm)   
+    cur_m = raw_cur_m
+
+    overnight = close_m < open_m
+
+    if overnight:
+        close_m += 1440
+        if cur_m < open_m:
+            cur_m += 1440
+
+    if open_m <= cur_m < close_m:
+        return open_label
+
+    if raw_cur_m < open_m:
+        mins_until = open_m - raw_cur_m
+    elif overnight and raw_cur_m < _to_minutes(*close_hm):
+        mins_until = 0
+    elif overnight:
+        mins_until = open_m - raw_cur_m
+    else:
+        return closed_label
+
+    if mins_until > 0:
+        hours, mins = divmod(mins_until, 60)
+        if hours == 0:
+            return f"Buka dalam {mins} menit"
+        return f"Buka dalam {hours} jam"
+
+    return closed_label
+
+
+def _is_open_today(hari_operasional: str, day_name_en: str) -> bool:
+    """True jika restoran beroperasi pada hari yang diberikan."""
+    if not hari_operasional or hari_operasional.strip().lower() in ("unknown", ""):
+        return True  
+    if "Setiap Hari" in hari_operasional:
+        return True
+    return day_name_en in hari_operasional
+
+
+def check_operational_status(
+    jam_buka: str, jam_tutup: str, hari_operasional: str
+) -> str:
+    """Status operasional berdasarkan waktu *sekarang*."""
+    now = get_samarinda_time()
+
+    if not _is_open_today(hari_operasional, now.strftime("%A")):
+        return "Tutup (Tidak beroperasi hari ini)"
+
+    open_hm = _parse_time(jam_buka)
+    close_hm = _parse_time(jam_tutup)
+
+    if open_hm is None or close_hm is None:
+        return "Jam operasional tidak tersedia"
+
+    return _compute_status(
+        open_hm, close_hm, (now.hour, now.minute)
+    )
+
+
+def check_operational_status_at_time(
+    jam_buka: str,
+    jam_tutup: str,
+    hari_operasional: str,
+    target_time: datetime,
+) -> str:
+    """Status operasional pada *waktu mendatang* tertentu."""
+    if not _is_open_today(hari_operasional, target_time.strftime("%A")):
+        return "Akan Tutup (Tidak beroperasi hari itu)"
+
+    open_hm = _parse_time(jam_buka)
+    close_hm = _parse_time(jam_tutup)
+
+    if open_hm is None or close_hm is None:
+        return "Jam operasional tidak tersedia"
+
+    return _compute_status(
+        open_hm,
+        close_hm,
+        (target_time.hour, target_time.minute),
+        open_label="Akan Buka",
+        closed_label="Akan Tutup",
+    )
+
+
+
+_NUMBER_PATTERNS: list[Tuple[str, int]] = [ 
+    (r"\bbelas\b", 11),
+    (r"\bdua\s+bela\b", 12),
+    (r"\btiga\s+bela\b", 13),
+    (r"\bempat\s+bela\b", 14),
+    (r"\blima\s+bela\b", 15),
+    (r"\benam\s+bela\b", 16),
+    (r"\btujuh\s+bela\b", 17),
+    (r"\bdelapan\s+bela\b", 18),
+    (r"\bsem\s+bela\b", 19),
+    (r"\bdua\s+puluh\s+sat[uu]\b", 21),
+    (r"\bdua\s+puluh\b", 20),
+    (r"\bsembilan\s+belas\b", 19),
+    (r"\bdelapan\s+belas\b", 18),
+    (r"\btujuh\s+belas\b", 17),
+    (r"\benam\s+belas\b", 16),
+    (r"\blima\s+belas\b", 15),
+    (r"\bempat\s+belas\b", 14),
+    (r"\btiga\s+belas\b", 13),
+    (r"\bdua\s+belas\b", 12),
+    (r"\bsebelas\b", 11),
+    (r"\bsepuluh\b", 10),
+
+    (r"\bsembilan\b", 9),
+    (r"\bdelapan\b", 8),
+    (r"\btujuh\b", 7),
+    (r"\benam\b", 6),
+    (r"\blima\b", 5),
+    (r"\bempat\b", 4),
+    (r"\btiga\b", 3),
+    (r"\bdua\b", 2),
+    (r"\bsatu\b", 1),
+
+    (r"\bsmbilan\b", 9), (r"\bsemblan\b", 9),
+    (r"\bdlapan\b", 8), (r"\bdlpan\b", 8),
+    (r"\btjuh\b", 7), (r"\btuju\b", 7),
+
+    (r"\benam\b", 6),
+    (r"\blma\b", 5), (r"\blim\b", 5),
+    (r"\bempet\b", 4), (r"\bmpat\b", 4),
+    (r"\btga\b", 3),
+    (r"\bspuluh\b", 10), (r"\bspluh\b", 10),
+]
+
 
 def extract_number_from_text(text: str) -> Optional[int]:
     """
-    Extract number from text with typo tolerance
-    Handles: angka (1-20), kata (satu-dua puluh), typo (lma->lima, tjuh->tujuh)
+    Ekstrak angka rekomendasi dari teks.
+
+    Prioritas:
+    1. Angka digit (paling andal).
+    2. Kata angka (dengan toleransi typo ringan).
+
+    Kembalikan None jika tidak ditemukan angka yang valid (1–20).
     """
-    text_lower = text.lower()
-    
-    # Try to find digits first (most reliable)
-    digit_match = re.search(r'\b(\d+)\b', text)
-    if digit_match:
-        num = int(digit_match.group(1))
-        if 1 <= num <= 20:  # Reasonable limit
+    match = re.search(r"\b(\d+)\b", text)
+    if match:
+        num = int(match.group(1))
+        if 1 <= num <= 20:
             return num
-    
-    # Number word mapping with typo variations (order matters - check longer patterns first)
-    number_patterns = [
-        # Standard with spaces (check first)
-        (r'\bdua\s+puluh\b', 20), (r'\bsembilan\s+belas\b', 19), (r'\bdelapan\s+belas\b', 18),
-        (r'\btujuh\s+belas\b', 17), (r'\benam\s+belas\b', 16), (r'\blima\s+belas\b', 15),
-        (r'\bempat\s+belas\b', 14), (r'\btiga\s+belas\b', 13), (r'\bdua\s+belas\b', 12),
-        
-        # Standard single words
-        (r'\bsebelas\b', 11), (r'\bsepuluh\b', 10),
-        (r'\bsembilan\b', 9), (r'\bdelapan\b', 8), (r'\btujuh\b', 7),
-        (r'\benam\b', 6), (r'\blima\b', 5), (r'\bempat\b', 4),
-        (r'\btiga\b', 3), (r'\bdua\b', 2), (r'\bsatu\b', 1),
-        
-        # Typo variations
-        (r'\bdlapan\b', 8), (r'\bdlpan\b', 8), (r'\bdlapn\b', 8),
-        (r'\btjuh\b', 7), (r'\btuju\b', 7), (r'\btujh\b', 7),
-        (r'\bsmbilan\b', 9), (r'\bsmblan\b', 9), (r'\bsemblan\b', 9),
-        (r'\benm\b', 6), (r'\bnam\b', 6),
-        (r'\blma\b', 5), (r'\blim\b', 5), (r'\blimma\b', 5),
-        (r'\bempet\b', 4), (r'\bmpat\b', 4), (r'\bempaat\b', 4),
-        (r'\btga\b', 3), (r'\btigga\b', 3),
-        (r'\bdu\b', 2), (r'\bduwa\b', 2), (r'\bduaa\b', 2),
-        (r'\bstu\b', 1), (r'\bsat\b', 1),
-        (r'\bspuluh\b', 10), (r'\bspluh\b', 10), (r'\bsepulu\b', 10),
-    ]
-    
-    # Try to find number words with word boundaries
-    for pattern, num in number_patterns:
+
+    text_lower = text.lower()
+    for pattern, num in _NUMBER_PATTERNS:
         if re.search(pattern, text_lower):
             return num
-    
+
     return None
+
 
 def parse_future_time(text: str) -> Optional[Tuple[datetime, str]]:
     """
-    Parse future time from text
-    Examples: "besok pagi", "besok siang", "malam ini", "nanti malam", "besok jam 7"
-    Returns: (target_datetime, time_context_description)
+    Deteksi ekspresi waktu mendatang dalam teks Bahasa Indonesia.
+
+    Contoh yang didukung:
+    - "besok pagi / siang / sore / malam"
+    - "nanti malam / siang"
+    - "jam 19" / "pukul 12"
     """
     text_lower = text.lower()
-    current_time = get_samarinda_time()
-    
-    # Check for "besok" (tomorrow)
-    if 'besok' in text_lower:
-        target_date = current_time + timedelta(days=1)
-        
-        # Check for specific time
-        if 'pagi' in text_lower or 'sarapan' in text_lower:
-            target_time = target_date.replace(hour=8, minute=0, second=0, microsecond=0)
-            return target_time, "sarapan besok"
-        elif 'siang' in text_lower or 'lunch' in text_lower:
-            target_time = target_date.replace(hour=12, minute=0, second=0, microsecond=0)
-            return target_time, "makan siang besok"
-        elif 'sore' in text_lower:
-            target_time = target_date.replace(hour=16, minute=0, second=0, microsecond=0)
-            return target_time, "cemilan sore besok"
-        elif 'malam' in text_lower or 'dinner' in text_lower:
-            target_time = target_date.replace(hour=19, minute=0, second=0, microsecond=0)
-            return target_time, "makan malam besok"
-        else:
-            # Default to lunch time
-            target_time = target_date.replace(hour=12, minute=0, second=0, microsecond=0)
-            return target_time, "besok"
-    
-    # Check for "nanti malam" or "malam ini"
-    if ('nanti' in text_lower and 'malam' in text_lower) or 'malam ini' in text_lower:
-        target_time = current_time.replace(hour=19, minute=0, second=0, microsecond=0)
-        if target_time <= current_time:
-            target_time += timedelta(days=1)
-        return target_time, "malam ini"
-    
-    # Check for "nanti siang"
-    if 'nanti' in text_lower and 'siang' in text_lower:
-        target_time = current_time.replace(hour=12, minute=0, second=0, microsecond=0)
-        if target_time <= current_time:
-            target_time += timedelta(days=1)
-        return target_time, "nanti siang"
-    
-    # Check for specific hour (e.g., "jam 7", "pukul 19")
-    hour_match = re.search(r'(?:jam|pukul)\s*(\d{1,2})', text_lower)
-    if hour_match:
-        hour = int(hour_match.group(1))
-        if 0 <= hour <= 23:
-            target_time = current_time.replace(hour=hour, minute=0, second=0, microsecond=0)
-            if target_time <= current_time:
-                target_time += timedelta(days=1)
-            
-            # Determine context
-            if 5 <= hour < 10:
-                context = f"jam {hour} (sarapan)"
-            elif 10 <= hour < 15:
-                context = f"jam {hour} (makan siang)"
-            elif 15 <= hour < 18:
-                context = f"jam {hour} (cemilan sore)"
-            else:
-                context = f"jam {hour} (makan malam)"
-            
-            return target_time, context
-    
-    return None
+    now = get_samarinda_time()
 
-def check_operational_status_at_time(jam_buka: str, jam_tutup: str, hari_operasional: str, target_time: datetime) -> str:
-    """Check if restaurant will be open at specific future time"""
-    target_hour = target_time.hour
-    target_minute = target_time.minute
-    target_day = target_time.strftime('%A')
-    
-    # Check if open on that day
-    if hari_operasional != 'Unknown' and 'Setiap Hari' not in hari_operasional:
-        if target_day not in hari_operasional:
-            return "Tutup (Tidak beroperasi hari ini)"
-    
-    # Parse operating hours
-    open_hour, open_minute = parse_time(jam_buka)
-    close_hour, close_minute = parse_time(jam_tutup)
-    
-    if open_hour is None or close_hour is None:
-        return "Jam operasional tidak tersedia"
-    
-    # Convert to minutes
-    target_minutes = target_hour * 60 + target_minute
-    open_minutes = open_hour * 60 + open_minute
-    close_minutes = close_hour * 60 + close_minute
-    
-    # Handle overnight operations
-    if close_minutes < open_minutes:
-        close_minutes += 24 * 60
-        if target_minutes < open_minutes:
-            target_minutes += 24 * 60
-    
-    if open_minutes <= target_minutes < close_minutes:
-        return "Akan Buka"
-    else:
-        return "Akan Tutup"
+    def _make_target(base: datetime, hour: int) -> datetime:
+        """Buat datetime pada jam tertentu; geser +1 hari jika sudah lewat."""
+        t = base.replace(hour=hour, minute=0, second=0, microsecond=0)
+        if t <= now:
+            t += timedelta(days=1)
+        return t
+
+    if "besok" in text_lower:
+        tomorrow = now + timedelta(days=1)
+
+        if any(k in text_lower for k in ("pagi", "sarapan")):
+            return tomorrow.replace(hour=8, minute=0, second=0, microsecond=0), "sarapan besok"
+        if any(k in text_lower for k in ("siang", "lunch")):
+            return tomorrow.replace(hour=12, minute=0, second=0, microsecond=0), "makan siang besok"
+        if "sore" in text_lower:
+            return tomorrow.replace(hour=16, minute=0, second=0, microsecond=0), "cemilan sore besok"
+        if any(k in text_lower for k in ("malam", "dinner")):
+            return tomorrow.replace(hour=19, minute=0, second=0, microsecond=0), "makan malam besok"
+
+        return tomorrow.replace(hour=12, minute=0, second=0, microsecond=0), "besok"
+
+    if ("nanti" in text_lower and "malam" in text_lower) or "malam ini" in text_lower:
+        return _make_target(now, 19), "malam ini"
+
+    if "nanti" in text_lower and "siang" in text_lower:
+        return _make_target(now, 12), "nanti siang"
+
+    match = re.search(r"(?:jam|pukul)\s*(\d{1,2})", text_lower)
+    if match:
+        hour = int(match.group(1))
+        if 0 <= hour <= 23:
+            target = _make_target(now, hour)
+            ctx_map = {
+                range(5, 10): f"jam {hour} (sarapan)",
+                range(10, 15): f"jam {hour} (makan siang)",
+                range(15, 18): f"jam {hour} (cemilan sore)",
+            }
+            context = next(
+                (label for r, label in ctx_map.items() if hour in r),
+                f"jam {hour} (makan malam)",
+            )
+            return target, context
+
+    return None

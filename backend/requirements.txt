@@ -1,34 +1,20 @@
-# FREE VERSION - Using HuggingFace Embeddings (Local, No API costs!)
+﻿fastapi
+uvicorn[standard]
 
-# Core
-fastapi==0.115.0
-uvicorn[standard]==0.32.0
-python-dotenv==1.0.1
+python-dotenv
+pydantic
+pydantic-settings
 
-# LangChain
-langchain==0.3.7
-langchain-aws==0.2.6
-langchain-community==0.3.5
-langchain-huggingface==0.1.2
 
-# FREE Embeddings (Local)
-sentence-transformers==3.3.1
-torch==2.5.1  # Required for sentence-transformers
+langchain
+langchain-community
 
-# Vector Database
-qdrant-client==1.12.1
+langchain-openai
+openai
 
-# Data Processing
-pandas==2.2.3
+qdrant-client
 
-# AWS (Only for LLM)
-boto3==1.35.36
+pandas
 
-# Validation
-pydantic==2.9.2
-pydantic-settings==2.6.0
-
-# Utilities
-pytz==2024.2
-tqdm==4.66.5
-dnspython==2.7.0  # For DNS resolution fixes
+pytz
+tqdm

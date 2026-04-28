@@ -1,29 +1,26 @@
-from pydantic_settings import BaseSettings
 from functools import lru_cache
+from pydantic_settings import BaseSettings
+
 
 class Settings(BaseSettings):
-    # Qdrant
     qdrant_url: str
     qdrant_api_key: str
-    qdrant_collection_name: str = "food_recommendations"
-    
-    # AWS 
-    aws_access_key_id: str
-    aws_secret_access_key: str
-    aws_region: str
-    
-    # Models
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"  
-    embedding_dimensions: int = 384  
-    llm_model: str = "anthropic.claude-3-5-sonnet-20240620-v1:0"  
-    
-    # Embedding Type
-    use_local_embeddings: bool = True  # Set to True for local embeddings
-    
+    qdrant_collection_name: str = "fix-food-chatbot"
+
+    openai_api_key: str
+    llm_model: str = "gpt-4o-mini"          
+    llm_temperature: float = 0.7
+    llm_max_tokens: int = 2000
+
+    embedding_model: str = "text-embedding-3-large"
+    embedding_dimensions: int = 3072
+
     class Config:
-        env_file = ".env"
+        env_file = "../.env"
         case_sensitive = False
 
+
+# Singleton — Settings hanya dibuat sekali selama lifetime aplikasi
 @lru_cache()
-def get_settings():
+def get_settings() -> Settings:
     return Settings()
