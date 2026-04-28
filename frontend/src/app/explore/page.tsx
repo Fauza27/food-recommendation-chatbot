@@ -61,10 +61,12 @@ function ExploreCard({ restaurant, index }: { restaurant: Restaurant; index: num
 
       {/* Time and Price */}
       <div className="flex items-center justify-between text-xs">
-        <div className="flex items-center gap-1.5 text-[hsl(var(--color-muted-foreground))]">
-          <Clock className="h-3.5 w-3.5" />
-          <span>{restaurant.jam_buka} - {restaurant.jam_tutup}</span>
-        </div>
+        {restaurant.jam_buka && restaurant.jam_tutup && (
+          <div className="flex items-center gap-1.5 text-[hsl(var(--color-muted-foreground))]">
+            <Clock className="h-3.5 w-3.5" />
+            <span>{restaurant.jam_buka} - {restaurant.jam_tutup}</span>
+          </div>
+        )}
         <div className="font-semibold text-[hsl(var(--color-primary))]">
           {restaurant.range_harga}
         </div>
@@ -85,16 +87,32 @@ function ExploreCard({ restaurant, index }: { restaurant: Restaurant; index: num
       )}
 
       {/* Detail button */}
-      {restaurant.url && (
-        <button
-          onClick={() => window.open(restaurant.url, '_blank')}
-          className="flex items-center justify-center gap-2 w-full py-2.5 glass text-sm font-medium text-[hsl(var(--color-foreground))] hover:glass-strong hover:text-[hsl(var(--color-primary))] transition-smooth"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-          </svg>
-          <span>Lihat Detail</span>
-        </button>
+      {(restaurant.url || restaurant.link_lokasi) && (
+        <div className="flex gap-2">
+          {restaurant.link_lokasi && (
+            <button
+              onClick={() => window.open(restaurant.link_lokasi, '_blank')}
+              className="flex items-center justify-center gap-2 flex-1 py-2.5 glass text-sm font-medium text-[hsl(var(--color-foreground))] hover:glass-strong hover:text-[hsl(var(--color-primary))] transition-smooth"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span>Lokasi</span>
+            </button>
+          )}
+          {restaurant.url && (
+            <button
+              onClick={() => window.open(restaurant.url, '_blank')}
+              className="flex items-center justify-center gap-2 flex-1 py-2.5 glass text-sm font-medium text-[hsl(var(--color-foreground))] hover:glass-strong hover:text-[hsl(var(--color-primary))] transition-smooth"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              <span>Detail</span>
+            </button>
+          )}
+        </div>
       )}
     </motion.div>
   );
