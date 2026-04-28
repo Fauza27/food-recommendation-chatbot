@@ -50,6 +50,7 @@ class Post(BaseModel):
     ringkasan: str
     tags: List[str] = Field(default_factory=list)
     url: str
+    link_lokasi: str = ""
 
 
 class PostsResponse(BaseModel):
