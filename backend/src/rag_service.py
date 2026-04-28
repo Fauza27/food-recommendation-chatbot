@@ -2,7 +2,6 @@ import logging
 from typing import List, Tuple
 
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI
 from qdrant_client import QdrantClient
 from qdrant_client.models import ScoredPoint
@@ -78,11 +77,11 @@ class RAGService:
     def _retrieve(self, query: str, top_k: int) -> List[dict]:
         """Cari restoran relevan di Qdrant menggunakan embedding query."""
         vector = self._embeddings.embed_query(query)
-        hits: List[ScoredPoint] = self._qdrant.search(
+        hits: List[ScoredPoint] = self._qdrant.query_points(
             collection_name=settings.qdrant_collection_name,
-            query_vector=vector,
+            query=vector,
             limit=top_k,
-        )
+        ).points
         return [hit.payload for hit in hits]
 
 

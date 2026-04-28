@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 from pydantic_settings import BaseSettings
 
 
@@ -16,7 +17,7 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 3072
 
     class Config:
-        env_file = "../.env"
+        env_file = str(Path(__file__).parent.parent / ".env")
         case_sensitive = False
 
 

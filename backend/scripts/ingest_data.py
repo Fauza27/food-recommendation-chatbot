@@ -4,7 +4,6 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-from langchain_huggingface import HuggingFaceEmbeddings
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 from tqdm import tqdm
