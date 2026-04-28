@@ -41,10 +41,12 @@ export function RestaurantCard({ restaurant, index = 0 }: Props) {
         </Badge>
       </div>
 
-      <div className="flex items-center gap-1.5 text-xs text-[hsl(var(--color-muted-foreground))]">
-        <Clock className="h-3.5 w-3.5 shrink-0" />
-        <span>{restaurant.jam_buka} - {restaurant.jam_tutup}</span>
-      </div>
+      {restaurant.jam_buka && restaurant.jam_tutup && (
+        <div className="flex items-center gap-1.5 text-xs text-[hsl(var(--color-muted-foreground))]">
+          <Clock className="h-3.5 w-3.5 shrink-0" />
+          <span>{restaurant.jam_buka} - {restaurant.jam_tutup}</span>
+        </div>
+      )}
 
       {restaurant.menu_andalan?.length > 0 && (
         <div className="space-y-1.5">
@@ -71,13 +73,13 @@ export function RestaurantCard({ restaurant, index = 0 }: Props) {
       )}
 
       <div className="flex gap-3 pt-1">
-        {restaurant.link_lokasi && (
+        {restaurant.link_lokasi && restaurant.link_lokasi !== "#" && (
           <a href={restaurant.link_lokasi} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1 text-xs font-medium text-[hsl(var(--color-primary))] hover:underline">
             <MapPin className="h-3.5 w-3.5 shrink-0" /> Lokasi
           </a>
         )}
-        {restaurant.link_instagram && (
+        {restaurant.link_instagram && restaurant.link_instagram !== "#" && (
           <a href={restaurant.link_instagram} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1 text-xs font-medium text-[hsl(var(--color-primary))] hover:underline">
             <Instagram className="h-3.5 w-3.5 shrink-0" /> Instagram
