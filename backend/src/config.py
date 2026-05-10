@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 2000
 
     embedding_model: str = "text-embedding-3-large"
-    embedding_dimensions: int = 3072
+    embedding_dimensions: int = 1536
 
     class Config:
         env_file = str(Path(__file__).parent.parent / ".env")
