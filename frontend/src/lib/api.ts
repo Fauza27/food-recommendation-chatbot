@@ -16,6 +16,7 @@ export interface Restaurant {
   tags: string[];
   url: string;
   link_lokasi: string;
+  popularity_score: number;
 }
 
 export interface RestaurantCard {
@@ -123,4 +124,95 @@ export async function sendChatMessage(
   }
   
   return response.json();
+}
+
+
+/**
+ * Kirim pesan chat via SSE streaming.
+ * Token akan diterima satu per satu melalui callback.
+ */
+export async function streamChatMessage(
+  message: string,
+  conversationHistory: ConversationMessage[],
+  onToken: (token: string) => void,
+  onRestaurants: (restaurants: RestaurantCard[]) => void,
+  onDone: () => void,
+  onError: (error: string) => void,
+): Promise<void> {
+  const response = await fetch(`${API_URL}/chat/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+    },
+    body: JSON.stringify({
+      message,
+      conversation_history: conversationHistory,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error ${response.status}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error('ReadableStream not supported');
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    // Parse SSE events from buffer
+    const lines = buffer.split('\n');
+    buffer = '';
+
+    let currentEvent = '';
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      if (line.startsWith('event: ')) {
+        currentEvent = line.slice(7).trim();
+      } else if (line.startsWith('data: ')) {
+        const dataStr = line.slice(6);
+        try {
+          const data = JSON.parse(dataStr);
+
+          switch (currentEvent) {
+            case 'token':
+              onToken(data.content);
+              break;
+            case 'restaurants':
+              onRestaurants(data.restaurants);
+              break;
+            case 'done':
+              onDone();
+              break;
+            case 'error':
+              onError(data.message);
+              break;
+          }
+        } catch {
+          // Incomplete JSON, put back in buffer
+          buffer = lines.slice(i).join('\n');
+          break;
+        }
+        currentEvent = '';
+      } else if (line === '') {
+        // Empty line (event separator), reset
+        currentEvent = '';
+      } else {
+        // Incomplete line, put back in buffer
+        buffer = lines.slice(i).join('\n');
+        break;
+      }
+    }
+  }
 }
