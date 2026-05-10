@@ -1,11 +1,16 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatBubble } from "@/components/ChatBubble";
 import { TypingIndicator } from "@/components/TypingIndicator";
-import { sendChatMessage, type ChatMessage, type ConversationMessage } from "@/lib/api";
+import {
+  streamChatMessage,
+  type ChatMessage,
+  type ConversationMessage,
+  type RestaurantCard,
+} from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 
 const SUGGESTIONS = [
@@ -28,33 +33,84 @@ export default function Home() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
 
+  // Auto-resize textarea
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    e.target.style.height = "auto";
+    e.target.style.height = Math.min(e.target.scrollHeight, 128) + "px";
+  }, []);
+
   const handleSend = async (text?: string) => {
     const msg = (text || input).trim();
     if (!msg || loading) return;
     setInput("");
     setError(null);
 
+    // Reset textarea height
+    if (inputRef.current) {
+      inputRef.current.style.height = "auto";
+    }
+
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: msg };
     setMessages((prev) => [...prev, userMsg]);
     setLoading(true);
+
+    // Buat placeholder AI message untuk streaming
+    const aiMsgId = crypto.randomUUID();
+    const aiMsg: ChatMessage = {
+      id: aiMsgId,
+      role: "assistant",
+      content: "",
+      restaurants: [],
+    };
+    setMessages((prev) => [...prev, aiMsg]);
 
     try {
       const history: ConversationMessage[] = messages.map((m) => ({
         role: m.role,
         content: m.content,
       }));
-      const res = await sendChatMessage(msg, history);
-      const aiMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: res.message,
-        restaurants: res.restaurants,
-      };
-      setMessages((prev) => [...prev, aiMsg]);
+
+      await streamChatMessage(
+        msg,
+        history,
+        // onToken — append token ke message
+        (token: string) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === aiMsgId ? { ...m, content: m.content + token } : m
+            )
+          );
+        },
+        // onRestaurants — set restaurant cards
+        (restaurants: RestaurantCard[]) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === aiMsgId ? { ...m, restaurants } : m
+            )
+          );
+        },
+        // onDone
+        () => {
+          setLoading(false);
+        },
+        // onError
+        (errorMsg: string) => {
+          setError(errorMsg);
+          setLoading(false);
+        }
+      );
     } catch (err) {
       setError("Gagal mengirim pesan. Cek koneksi internet atau coba lagi nanti.");
       console.error("Chat error:", err);
-    } finally {
+      // Hapus placeholder AI message jika error di awal
+      setMessages((prev) => {
+        const last = prev[prev.length - 1];
+        if (last?.id === aiMsgId && !last.content) {
+          return prev.slice(0, -1);
+        }
+        return prev;
+      });
       setLoading(false);
     }
   };
@@ -101,7 +157,7 @@ export default function Home() {
             {messages.map((m) => (
               <ChatBubble key={m.id} message={m} />
             ))}
-            <AnimatePresence>{loading && <TypingIndicator />}</AnimatePresence>
+            <AnimatePresence>{loading && !messages[messages.length - 1]?.content && <TypingIndicator />}</AnimatePresence>
             {error && (
               <div className="px-4">
                 <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-2 text-sm rounded-lg">
@@ -119,7 +175,7 @@ export default function Home() {
           <textarea
             ref={inputRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder="Cari rekomendasi makanan..."
             rows={1}

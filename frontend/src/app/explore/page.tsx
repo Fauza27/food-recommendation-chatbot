@@ -124,7 +124,7 @@ export default function ExplorePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [category, setCategory] = useState("all");
 
-  const { data: postsData, isLoading } = useQuery({
+  const { data: postsData, isLoading, isError, refetch } = useQuery({
     queryKey: ["posts", page, searchQuery, category],
     queryFn: () => fetchPosts({ page, limit: 20, search: searchQuery || undefined, category: category !== "all" ? category : undefined }),
   });
@@ -188,7 +188,21 @@ export default function ExplorePage() {
         )}
 
         {/* Grid */}
-        {isLoading ? (
+        {isError ? (
+          <div className="text-center py-16 space-y-4">
+            <div className="text-4xl">😵</div>
+            <p className="text-lg font-semibold text-[hsl(var(--color-foreground))]">Gagal memuat data</p>
+            <p className="text-sm text-[hsl(var(--color-muted-foreground))]">
+              Tidak dapat terhubung ke server. Pastikan backend berjalan dan coba lagi.
+            </p>
+            <button
+              onClick={() => refetch()}
+              className="px-6 py-2.5 bg-[hsl(var(--color-foreground))] text-[hsl(var(--color-background))] rounded-lg text-sm font-medium hover:opacity-90 transition-smooth"
+            >
+              Coba Lagi
+            </button>
+          </div>
+        ) : isLoading ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <Skeleton key={i} className="h-80 rounded-2xl" />
