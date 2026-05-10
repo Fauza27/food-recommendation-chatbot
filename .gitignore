@@ -85,5 +85,6 @@ Thumbs.db
 *.swp
 
 # Project specific
+backend/data/
 backend/data/*.csv.backup
 backend/data/*.json.backup
