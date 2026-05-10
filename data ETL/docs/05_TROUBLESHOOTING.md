@@ -2,7 +2,7 @@
 
 Solusi untuk masalah umum yang mungkin terjadi saat menjalankan pipeline.
 
-## 🔧 General Issues
+## General Issues
 
 ### Error: "Module not found"
 
@@ -46,16 +46,16 @@ pip install pandas openai azure-cognitiveservices-speech requests tqdm
 1. Cek kembali KEY di [Azure Portal](https://portal.azure.com/) → Resource → Keys and Endpoint
 2. Pastikan tidak ada spasi di awal/akhir key
 3. Set environment variable dengan benar:
-   ```bash
-   # Windows CMD
-   set AZURE_SPEECH_KEY=your-key-here
-   
-   # Windows PowerShell
-   $env:AZURE_SPEECH_KEY="your-key-here"
-   
-   # Linux/macOS
-   export AZURE_SPEECH_KEY=your-key-here
-   ```
+ ```bash
+ # Windows CMD
+ set AZURE_SPEECH_KEY=your-key-here
+
+ # Windows PowerShell
+ $env:AZURE_SPEECH_KEY="your-key-here"
+
+ # Linux/macOS
+ export AZURE_SPEECH_KEY=your-key-here
+ ```
 
 ### Error: "Region mismatch"
 
@@ -64,9 +64,9 @@ pip install pandas openai azure-cognitiveservices-speech requests tqdm
 **Solusi**:
 1. Cek region di Azure Portal → Resource → Keys and Endpoint
 2. Update environment variable:
-   ```bash
-   set AZURE_REGION=southeastasia
-   ```
+ ```bash
+ set AZURE_REGION=southeastasia
+ ```
 3. Region harus lowercase tanpa spasi (contoh: `eastus`, `southeastasia`)
 
 ### Error: "Quota exceeded"
@@ -109,14 +109,14 @@ pip install pandas openai azure-cognitiveservices-speech requests tqdm
 2. Pastikan tidak ada spasi di awal/akhir
 3. Key harus dimulai dengan `sk-` atau `sk-proj-`
 4. Set environment variable:
-   ```bash
-   set OPENAI_API_KEY=sk-proj-your-key-here
-   ```
+ ```bash
+ set OPENAI_API_KEY=sk-proj-your-key-here
+ ```
 5. Buat key baru jika perlu
 
 ### Error: "You exceeded your current quota"
 
-**Penyebab**: 
+**Penyebab**:
 - Belum add payment method, atau
 - Sudah melebihi spending limit
 
@@ -154,7 +154,7 @@ pip install pandas openai azure-cognitiveservices-speech requests tqdm
 
 ---
 
-## 📊 Data Processing Issues
+## Data Processing Issues
 
 ### Issue: "Progress stuck at X%"
 
@@ -192,16 +192,16 @@ pip install pandas openai azure-cognitiveservices-speech requests tqdm
 1. Hapus output file
 2. Jalankan script dari awal
 3. Atau gunakan pandas untuk remove duplicates:
-   ```python
-   import pandas as pd
-   df = pd.read_csv('data/chatbot_food_dataset.csv')
-   df = df.drop_duplicates()
-   df.to_csv('data/chatbot_food_dataset.csv', index=False)
-   ```
+ ```python
+ import pandas as pd
+ df = pd.read_csv('data/chatbot_food_dataset.csv')
+ df = df.drop_duplicates()
+ df.to_csv('data/chatbot_food_dataset.csv', index=False)
+ ```
 
 ---
 
-## 🔄 Resume & Recovery Issues
+## Resume & Recovery Issues
 
 ### Issue: "Resume not working"
 
@@ -218,21 +218,21 @@ pip install pandas openai azure-cognitiveservices-speech requests tqdm
 1. Hapus atau rename output file
 2. Jalankan script lagi
 3. Atau gunakan backup file:
-   ```bash
-   # Windows
-   del data\chatbot_food_dataset.csv
-   
-   # Linux/macOS
-   rm data/chatbot_food_dataset.csv
-   ```
+ ```bash
+ # Windows
+ del data\chatbot_food_dataset.csv
+
+ # Linux/macOS
+ rm data/chatbot_food_dataset.csv
+ ```
 
 ---
 
-## 💰 Cost & Usage Issues
+## Cost & Usage Issues
 
 ### Issue: "Biaya lebih tinggi dari estimasi"
 
-**Penyebab**: 
+**Penyebab**:
 - Lebih banyak tokens digunakan
 - Retry mechanism
 - Input text lebih panjang
@@ -298,7 +298,7 @@ pip install pandas openai azure-cognitiveservices-speech requests tqdm
 
 ---
 
-## 🔍 Debugging Tips
+## Debugging Tips
 
 ### 1. Enable Verbose Logging
 
@@ -343,27 +343,27 @@ print(f"Non-null nama_tempat: {df['nama_tempat'].notna().sum()}")
 
 ---
 
-## 🆘 Still Having Issues?
+## Still Having Issues?
 
 ### Check These First
 
-1. ✅ Dependencies installed (`pip install -r requirements.txt`)
-2. ✅ Environment variables set (AZURE_SPEECH_KEY, OPENAI_API_KEY)
-3. ✅ Input files exist in `data/` folder
-4. ✅ Internet connection stable
-5. ✅ API keys valid and have quota
+1. Dependencies installed (`pip install -r requirements.txt`)
+2. Environment variables set (AZURE_SPEECH_KEY, OPENAI_API_KEY)
+3. Input files exist in `data/` folder
+4. Internet connection stable
+5. API keys valid and have quota
 
 ### Get Help
 
 1. **Check console output** - Error messages biasanya jelas
 2. **Read error message carefully** - Sering ada hint solusi
 3. **Check API status**:
-   - Azure: [status.azure.com](https://status.azure.com/)
-   - OpenAI: [status.openai.com](https://status.openai.com/)
+ - Azure: [status.azure.com](https://status.azure.com/)
+ - OpenAI: [status.openai.com](https://status.openai.com/)
 4. **Search error message** - Google/Stack Overflow
 5. **Check documentation**:
-   - Azure: [docs.microsoft.com/azure](https://docs.microsoft.com/azure)
-   - OpenAI: [platform.openai.com/docs](https://platform.openai.com/docs)
+ - Azure: [docs.microsoft.com/azure](https://docs.microsoft.com/azure)
+ - OpenAI: [platform.openai.com/docs](https://platform.openai.com/docs)
 
 ### Common Commands
 
@@ -392,7 +392,7 @@ python -c "import azure.cognitiveservices.speech; print('OK')"
 
 ---
 
-## 📚 Related Documentation
+## Related Documentation
 
 - Main README: `01_README.md`
 - Pipeline Guide: `02_PIPELINE_GUIDE.md`

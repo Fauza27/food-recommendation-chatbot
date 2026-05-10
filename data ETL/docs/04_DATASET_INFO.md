@@ -2,7 +2,7 @@
 
 Dokumentasi lengkap struktur dan status dataset Food Chatbot.
 
-## 📊 Dataset Overview
+## Dataset Overview
 
 **File**: `data/chatbot_food_dataset.csv`
 
@@ -10,11 +10,11 @@ Dokumentasi lengkap struktur dan status dataset Food Chatbot.
 
 **Sumber**: Instagram @jalanmakanenak (food review account)
 
-**Status**: ✅ COMPLETE - Siap untuk training chatbot
+**Status**: COMPLETE - Siap untuk training chatbot
 
 ---
 
-## 📋 Column List (34 Columns)
+## Column List (34 Columns)
 
 ### 1. Review & Transcription (4 columns)
 
@@ -23,7 +23,7 @@ Dokumentasi lengkap struktur dan status dataset Food Chatbot.
 | `full_review` | text | Review lengkap (gabungan semua info) | "Bakso Az Zahra di Jalan Raya..." |
 | `raw_transcribe` | text | Transkripsi mentah dari audio | "bakso adjra kua nya enak..." |
 | `cleaned_transcribe` | text | Transkripsi yang sudah dibersihkan | "Bakso Az Zahra kuahnya enak..." |
-| `caption` | text | Caption Instagram post | "Bakso Az Zahra 🍜 #bakso..." |
+| `caption` | text | Caption Instagram post | "Bakso Az Zahra #bakso..." |
 
 ### 2. Extracted Information (11 columns)
 
@@ -82,7 +82,7 @@ Dokumentasi lengkap struktur dan status dataset Food Chatbot.
 
 ---
 
-## 📈 Dataset Statistics
+## Dataset Statistics
 
 ### Completeness Rate
 
@@ -100,19 +100,19 @@ Dokumentasi lengkap struktur dan status dataset Food Chatbot.
 
 | Status | Count | Percentage |
 |--------|-------|------------|
-| ✅ Successfully transcribed | 839 | 93.2% |
-| ⚠️ No audio (silent video) | 45 | 5.0% |
-| ⚠️ No audio URL | 16 | 1.8% |
+| Successfully transcribed | 839 | 93.2% |
+| No audio (silent video) | 45 | 5.0% |
+| No audio URL | 16 | 1.8% |
 | **TOTAL** | **900** | **100%** |
 
 ### Link Lokasi Status
 
 | Status | Count | Percentage |
 |--------|-------|------------|
-| ✅ Valid Google Maps link | 380 | 42.2% |
-| ⚠️ "Link tidak tersedia" | 249 | 27.7% |
-| ⚠️ "Tidak Ditemukan" | 77 | 8.6% |
-| ❌ No match | 194 | 21.6% |
+| Valid Google Maps link | 380 | 42.2% |
+| "Link tidak tersedia" | 249 | 27.7% |
+| "Tidak Ditemukan" | 77 | 8.6% |
+| No match | 194 | 21.6% |
 | **TOTAL** | **900** | **100%** |
 
 ### Kategori Makanan Distribution
@@ -148,22 +148,22 @@ Top 10 kategori makanan:
 
 ---
 
-## 🎯 Data Quality
+## Data Quality
 
 ### Strengths
 
-✅ **High transcription accuracy** (97.4% success rate)
-✅ **Comprehensive metadata** (34 columns)
-✅ **Rich engagement data** (likes, comments, views)
-✅ **Structured information** (11 extracted fields)
-✅ **Clean text** (typo correction with GPT)
+ **High transcription accuracy** (97.4% success rate)
+ **Comprehensive metadata** (34 columns)
+ **Rich engagement data** (likes, comments, views)
+ **Structured information** (11 extracted fields)
+ **Clean text** (typo correction with GPT)
 
 ### Limitations
 
-⚠️ **Link lokasi incomplete** (42% coverage)
-⚠️ **Some missing operational hours** (~20% rows)
-⚠️ **Silent videos** (45 rows tanpa audio)
-⚠️ **Price range varies** (some missing or unclear)
+ **Link lokasi incomplete** (42% coverage)
+ **Some missing operational hours** (~20% rows)
+ **Silent videos** (45 rows tanpa audio)
+ **Price range varies** (some missing or unclear)
 
 ### Recommendations for Improvement
 
@@ -174,7 +174,7 @@ Top 10 kategori makanan:
 
 ---
 
-## 🔄 Pipeline Processing Summary
+## Pipeline Processing Summary
 
 ### Step 1: Transkripsi Audio
 - **Input**: 900 rows dengan audioUrl
@@ -207,7 +207,7 @@ Top 10 kategori makanan:
 
 ---
 
-## 📁 File Locations
+## File Locations
 
 ### Input Files
 - `data/dataset_instagram-scraper_2026-05-05_12-08-22-179.csv` - Raw Instagram data
@@ -255,11 +255,11 @@ print(f"Affordable food: {len(affordable)} rows")
 ```python
 # Rows with complete information
 complete = df[
-    (df['nama_tempat'].notna()) &
-    (df['lokasi'].notna()) &
-    (df['kategori_makanan'].notna()) &
-    (df['range_harga'].notna()) &
-    (df['link_lokasi'].notna())
+ (df['nama_tempat'].notna()) &
+ (df['lokasi'].notna()) &
+ (df['kategori_makanan'].notna()) &
+ (df['range_harga'].notna()) &
+ (df['link_lokasi'].notna())
 ]
 print(f"Complete records: {len(complete)} rows")
 ```
@@ -269,10 +269,10 @@ print(f"Complete records: {len(complete)} rows")
 ```python
 # Select relevant columns for chatbot
 chatbot_cols = [
-    'nama_tempat', 'lokasi', 'kategori_makanan', 
-    'range_harga', 'menu_andalan', 'fasilitas',
-    'jam_buka', 'jam_tutup', 'link_lokasi',
-    'cleaned_transcribe', 'full_review'
+ 'nama_tempat', 'lokasi', 'kategori_makanan',
+ 'range_harga', 'menu_andalan', 'fasilitas',
+ 'jam_buka', 'jam_tutup', 'link_lokasi',
+ 'cleaned_transcribe', 'full_review'
 ]
 
 chatbot_df = df[chatbot_cols]
@@ -281,7 +281,7 @@ chatbot_df.to_csv('data/chatbot_training_data.csv', index=False)
 
 ---
 
-## 📚 Related Documentation
+## Related Documentation
 
 - Pipeline Guide: `02_PIPELINE_GUIDE.md`
 - Setup Guide: `03_SETUP_GUIDE.md`
@@ -289,6 +289,6 @@ chatbot_df.to_csv('data/chatbot_training_data.csv', index=False)
 
 ---
 
-**Dataset Ready! 🎉**
+**Dataset Ready! **
 
 Next: Train your chatbot dengan dataset ini!
