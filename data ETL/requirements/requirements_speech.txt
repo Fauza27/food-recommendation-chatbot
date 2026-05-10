@@ -1,0 +1,5 @@
+# Google Cloud Speech-to-Text API
+google-cloud-speech>=2.30.0
+
+# Untuk download audio dari URL
+requests>=2.31.0

@@ -1,0 +1,5 @@
+# OpenAI Python SDK
+openai>=1.0.0
+
+# Untuk download audio dari URL
+requests>=2.31.0

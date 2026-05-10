@@ -1,0 +1,5 @@
+# Azure Speech SDK
+azure-cognitiveservices-speech>=1.40.0
+
+# Untuk download audio dari URL
+requests>=2.31.0
