@@ -4,7 +4,8 @@ from typing import List, Tuple
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_openai import ChatOpenAI
 from qdrant_client import QdrantClient
-from qdrant_client.models import ScoredPoint
+from qdrant_client.models import Filter, FieldCondition, MatchText, ScoredPoint
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .config import get_settings
 from .models import RestaurantCard
@@ -25,7 +26,25 @@ _MAX_RECOMMENDATIONS = 15
 _DEFAULT_RECOMMENDATIONS = 5
 
 _RETRIEVE_MULTIPLIER = 2
-_RETRIEVE_MINIMUM = 20
+_RETRIEVE_MINIMUM = 40
+
+_MIN_RELEVANCE_SCORE = 0.55
+
+# Mapping keyword query → kategori di Qdrant payload
+_CATEGORY_KEYWORDS = {
+    "soto": "Soto", "bakso": "Bakso", "mie": "Mie",
+    "mie ayam": "Mie Ayam", "mie goreng": "Mie Goreng",
+    "japanese": "Japanese", "jepang": "Japanese",
+    "coffee": "Coffee", "kopi": "Kopi",
+    "seafood": "Seafood", "steak": "Steak",
+    "ayam": "Ayam", "ayam goreng": "Ayam Goreng",
+    "nasi goreng": "Nasi Goreng", "ikan bakar": "Ikan Bakar",
+    "sate": "Sate", "pecel": "Pecel", "bubur": "Bubur",
+    "pizza": "Pizza", "burger": "Burger",
+    "roti": "Roti", "pentol": "Pentol", "tahu": "Tahu",
+    "es krim": "Es Krim", "dessert": "Dessert",
+    "nasi kuning": "Nasi Kuning", "bakmi": "Bakmi",
+}
 
 
 class RAGService:
@@ -42,10 +61,11 @@ class RAGService:
     @staticmethod
     def _init_embeddings() -> "OpenAIEmbeddings":
         from langchain_openai import OpenAIEmbeddings
-        logger.info("Loading OpenAI embeddings: text-embedding-3-large")
+        logger.info("Loading OpenAI embeddings: %s (dim=%d)", settings.embedding_model, settings.embedding_dimensions)
         embeddings = OpenAIEmbeddings(
             model=settings.embedding_model,
             openai_api_key=settings.openai_api_key,
+            dimensions=settings.embedding_dimensions,
         )
         logger.info("Embeddings loaded")
         return embeddings
@@ -74,21 +94,69 @@ class RAGService:
         return client
 
 
-    def _retrieve(self, query: str, top_k: int) -> List[dict]:
-        """Cari restoran relevan di Qdrant menggunakan embedding query."""
+    @staticmethod
+    def _detect_category(query: str) -> str | None:
+        """Deteksi kategori makanan dari query pengguna."""
+        lower = query.lower()
+        # Cek frasa lebih panjang dulu (e.g., "mie ayam" sebelum "mie")
+        for keyword in sorted(_CATEGORY_KEYWORDS, key=len, reverse=True):
+            if keyword in lower:
+                return _CATEGORY_KEYWORDS[keyword]
+        return None
+
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=4))
+    def _retrieve(
+        self, query: str, top_k: int, category_filter: str | None = None
+    ) -> List[dict]:
+        """
+        Cari restoran relevan di Qdrant menggunakan embedding query.
+        Mendukung metadata pre-filtering berdasarkan kategori.
+        Hasil difilter berdasarkan minimum relevance score.
+        """
         vector = self._embeddings.embed_query(query)
+
+        query_filter = None
+        if category_filter:
+            query_filter = Filter(
+                must=[
+                    FieldCondition(
+                        key="kategori_makanan",
+                        match=MatchText(text=category_filter),
+                    )
+                ]
+            )
+
         hits: List[ScoredPoint] = self._qdrant.query_points(
             collection_name=settings.qdrant_collection_name,
             query=vector,
+            query_filter=query_filter,
             limit=top_k,
         ).points
-        return [hit.payload for hit in hits]
+
+        filtered = [hit.payload for hit in hits if hit.score >= _MIN_RELEVANCE_SCORE]
+
+        # Jika filter terlalu ketat dan hasil terlalu sedikit, fallback tanpa filter
+        if category_filter and len(filtered) < 3:
+            logger.info(
+                "Category filter '%s' returned only %d results, falling back to unfiltered",
+                category_filter, len(filtered),
+            )
+            hits = self._qdrant.query_points(
+                collection_name=settings.qdrant_collection_name,
+                query=vector,
+                limit=top_k,
+            ).points
+            filtered = [hit.payload for hit in hits if hit.score >= _MIN_RELEVANCE_SCORE]
+
+        return filtered
 
 
     @staticmethod
     def _annotate_status(restaurants: List[dict], target_time=None) -> List[dict]:
         """
         Tambahkan field `status_operasional` ke setiap restoran.
+        Restoran yang buka diprioritaskan di depan.
         """
         open_list: List[dict] = []
         closed_list: List[dict] = []
@@ -151,6 +219,7 @@ INSTRUKSI:
 4. Sesuaikan dengan konteks waktu (sarapan/siang/malam/cemilan).
 5. Pertimbangkan permintaan khusus pengguna (budget, jenis makanan, fasilitas).
 6. Gunakan Bahasa Indonesia yang ramah dan natural.
+7. HANYA rekomendasikan tempat yang ada di DATA RESTORAN di bawah.
 
 FORMAT WAJIB (gunakan persis):
 [Sapaan singkat 1 kalimat]
@@ -174,8 +243,18 @@ DATA RESTORAN YANG TERSEDIA:
         """Format data restoran menjadi teks konteks untuk LLM."""
         lines = []
         for i, r in enumerate(restaurants, 1):
-            menu = ", ".join(r.get("menu_andalan", [])[:3]) or "Tidak tersedia"
-            fasilitas = ", ".join(r.get("fasilitas", [])) or "Tidak tersedia"
+            menu_raw = r.get("menu_andalan", [])
+            if isinstance(menu_raw, list):
+                menu = ", ".join(menu_raw[:3]) or "Tidak tersedia"
+            else:
+                menu = str(menu_raw) if menu_raw else "Tidak tersedia"
+
+            fasilitas_raw = r.get("fasilitas", [])
+            if isinstance(fasilitas_raw, list):
+                fasilitas = ", ".join(fasilitas_raw) or "Tidak tersedia"
+            else:
+                fasilitas = str(fasilitas_raw) if fasilitas_raw else "Tidak tersedia"
+
             lines.append(
                 f"{i}. {r.get('nama_tempat', 'Unknown')}\n"
                 f"   Kategori : {r.get('kategori_makanan', 'Unknown')}\n"
@@ -229,8 +308,10 @@ DATA RESTORAN YANG TERSEDIA:
             if len(cards) >= max_cards:
                 break
             
-            # Ambil link Instagram dari URL jika ada
+            # Ambil link Instagram dari URL — validasi bukan CDN URL
             link_instagram = resto.get("link_instagram") or resto.get("url", "#")
+            if link_instagram and "cdninstagram" in link_instagram:
+                link_instagram = "#"
             
             cards.append(
                 RestaurantCard(
@@ -250,6 +331,38 @@ DATA RESTORAN YANG TERSEDIA:
 
         return cards
 
+
+    def _compress_query_with_history(self, query: str, history: list) -> str:
+        """
+        Gabungkan query baru dengan konteks dari history percakapan
+        untuk menghasilkan query retrieval yang standalone.
+        """
+        if not history:
+            return query
+
+        last_exchanges = history[-4:]
+        context = "\n".join(
+            [f"{m['role']}: {m['content'][:200]}" for m in last_exchanges]
+        )
+
+        prompt = (
+            "Berdasarkan riwayat percakapan berikut, buat query pencarian restoran "
+            "yang lengkap dan standalone. Gabungkan konteks relevan dari riwayat.\n\n"
+            f"Riwayat:\n{context}\n\n"
+            f"Query baru: {query}\n\n"
+            "Output hanya query standalone, tanpa penjelasan:"
+        )
+
+        try:
+            response = self._llm.invoke([HumanMessage(content=prompt)])
+            compressed = response.content.strip()
+            logger.info("Compressed query: '%s' -> '%s'", query, compressed)
+            return compressed
+        except Exception as exc:
+            logger.warning("Query compression failed, using original: %s", exc)
+            return query
+
+
     def generate_response(
         self,
         user_query: str,
@@ -261,10 +374,12 @@ DATA RESTORAN YANG TERSEDIA:
         Alur:
         1. Tentukan jumlah rekomendasi yang diminta (default 5, maks 15).
         2. Deteksi referensi waktu mendatang ("besok pagi", "jam 7", dll.).
-        3. Ambil kandidat restoran dari Qdrant.
-        4. Anotasi & urutkan berdasarkan status operasional.
-        5. Bangun prompt + riwayat percakapan, kirim ke OpenAI.
-        6. Buat kartu restoran sesuai jumlah yang diminta.
+        3. Compress query dengan history untuk retrieval yang kontekstual.
+        4. Deteksi kategori untuk metadata pre-filtering.
+        5. Ambil kandidat restoran dari Qdrant.
+        6. Anotasi & urutkan berdasarkan status operasional.
+        7. Bangun prompt + riwayat percakapan, kirim ke OpenAI.
+        8. Buat kartu restoran dari pool kandidat yang sama.
         """
         # 1. Jumlah rekomendasi
         requested_count = min(
@@ -286,20 +401,27 @@ DATA RESTORAN YANG TERSEDIA:
 
         current_time = target_time or get_samarinda_time()
 
-        # 3. Retrieval
+        # 3. Contextual query compression
+        retrieval_query = self._compress_query_with_history(user_query, conversation_history)
+
+        # 4. Deteksi kategori untuk pre-filtering
+        category_filter = self._detect_category(retrieval_query)
+
+        # 5. Retrieval
         retrieve_count = max(requested_count * _RETRIEVE_MULTIPLIER, _RETRIEVE_MINIMUM)
         enhanced_query = (
-            f"{user_query} "
+            f"{retrieval_query} "
             f"(Waktu: {time_context}, Hari: {day_name}, "
             f"Jam: {current_time.strftime('%H:%M')})"
         )
-        raw_results = self._retrieve(enhanced_query, top_k=retrieve_count)
+        raw_results = self._retrieve(enhanced_query, top_k=retrieve_count, category_filter=category_filter)
 
-        # 4. Anotasi & sortir
+        # 6. Anotasi & sortir
         annotated = self._annotate_status(raw_results, target_time=target_time)
 
-        # 5. Generasi teks
-        context_text = self._format_context(annotated[: requested_count + 5])
+        # 7. Generasi teks — gunakan pool kandidat yang sama untuk LLM dan cards
+        candidate_pool = annotated[: requested_count + 5]
+        context_text = self._format_context(candidate_pool)
         system_prompt = self._build_system_prompt(
             requested_count=requested_count,
             time_context=time_context,
@@ -311,10 +433,81 @@ DATA RESTORAN YANG TERSEDIA:
         messages = self._build_messages(system_prompt, conversation_history, user_query)
         response = self._llm.invoke(messages)
 
-        # 6. Kartu
-        cards = self._make_cards(annotated[:requested_count], max_cards=requested_count)
+        # 8. Kartu — dari pool kandidat yang sama agar selalu match dengan rekomendasi LLM
+        cards = self._make_cards(candidate_pool, max_cards=requested_count)
 
         return response.content, cards
+
+
+    def generate_response_stream(
+        self,
+        user_query: str,
+        conversation_history: List[dict],
+    ):
+        """
+        Versi streaming dari generate_response.
+        Yield token per token, lalu yield cards di akhir.
+
+        Yields:
+            Tuple[str, str | List[RestaurantCard]]:
+                ("token", content_str) untuk setiap token
+                ("restaurants", List[RestaurantCard]) untuk cards
+                ("done", "") sebagai penanda selesai
+        """
+        # 1-6: Sama dengan generate_response
+        requested_count = min(
+            extract_number_from_text(user_query) or _DEFAULT_RECOMMENDATIONS,
+            _MAX_RECOMMENDATIONS,
+        )
+
+        future = parse_future_time(user_query)
+        if future:
+            target_time, time_context = future
+            day_name = _DAY_ID_MAP.get(target_time.strftime("%A"), target_time.strftime("%A"))
+            is_future = True
+        else:
+            target_time = None
+            time_context = get_time_context()
+            day_name = get_day_name_indonesian()
+            is_future = False
+
+        current_time = target_time or get_samarinda_time()
+
+        retrieval_query = self._compress_query_with_history(user_query, conversation_history)
+        category_filter = self._detect_category(retrieval_query)
+
+        retrieve_count = max(requested_count * _RETRIEVE_MULTIPLIER, _RETRIEVE_MINIMUM)
+        enhanced_query = (
+            f"{retrieval_query} "
+            f"(Waktu: {time_context}, Hari: {day_name}, "
+            f"Jam: {current_time.strftime('%H:%M')})"
+        )
+        raw_results = self._retrieve(enhanced_query, top_k=retrieve_count, category_filter=category_filter)
+
+        annotated = self._annotate_status(raw_results, target_time=target_time)
+
+        candidate_pool = annotated[: requested_count + 5]
+        context_text = self._format_context(candidate_pool)
+        system_prompt = self._build_system_prompt(
+            requested_count=requested_count,
+            time_context=time_context,
+            day_name=day_name,
+            current_time_str=current_time.strftime("%H:%M"),
+            is_future=is_future,
+            context_text=context_text,
+        )
+        messages = self._build_messages(system_prompt, conversation_history, user_query)
+
+        # Stream tokens via LLM
+        for chunk in self._llm.stream(messages):
+            if chunk.content:
+                yield ("token", chunk.content)
+
+        # Kirim cards setelah streaming selesai
+        cards = self._make_cards(candidate_pool, max_cards=requested_count)
+        yield ("restaurants", cards)
+        yield ("done", "")
+
 
 _DAY_ID_MAP = {
     "Monday": "Senin",

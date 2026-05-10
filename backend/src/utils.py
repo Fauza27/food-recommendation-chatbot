@@ -101,13 +101,22 @@ def _compute_status(
     return closed_label
 
 
-def _is_open_today(hari_operasional: str, day_name_en: str) -> bool:
+def _is_open_today(hari_operasional: str | list, day_name_en: str) -> bool:
     """True jika restoran beroperasi pada hari yang diberikan."""
-    if not hari_operasional or hari_operasional.strip().lower() in ("unknown", ""):
-        return True  
-    if "Setiap Hari" in hari_operasional:
+    if not hari_operasional:
         return True
-    return day_name_en in hari_operasional
+    
+    if isinstance(hari_operasional, list):
+        if not hari_operasional:
+            return True
+        hari_str = ", ".join(hari_operasional).lower()
+        return "setiap hari" in hari_str or day_name_en.lower() in hari_str
+        
+    if str(hari_operasional).strip().lower() in ("unknown", ""):
+        return True  
+    if "Setiap Hari" in str(hari_operasional):
+        return True
+    return day_name_en in str(hari_operasional)
 
 
 def check_operational_status(
