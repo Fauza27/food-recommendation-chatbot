@@ -1,20 +1,20 @@
 # Pipeline Scripts
 
-Script-script utama untuk ETL pipeline Food Chatbot Dataset.
+Core executable scripts for the Food Chatbot Dataset ETL pipeline.
 
-## 📋 Pipeline Steps
+## Pipeline Steps
 
-### Step 1: Transkripsi Audio
+### Step 1: Audio Transcription
 **File**: `step1_transcribe.py`
 
-Mengubah audio Instagram menjadi text menggunakan Azure Speech Service.
+Transcribes Instagram audio into text utilizing Azure Speech Service continuous recognition.
 
 **Requirements**:
 - `AZURE_SPEECH_KEY` environment variable
 - `AZURE_REGION` environment variable
 
 **Input**: `data/dataset_instagram-scraper_*.csv`
-**Output**: `data/transcribed_dataset_*.csv` (+ kolom `raw_transcribe`)
+**Output**: `data/transcribed_dataset_*.csv` (+ `raw_transcribe` column)
 
 **Run**:
 ```bash
@@ -23,16 +23,16 @@ python pipeline/step1_transcribe.py
 
 ---
 
-### Step 2: Cleaning Transkripsi
+### Step 2: Transcription Cleaning
 **File**: `step2_clean.py`
 
-Memperbaiki typo dan kesalahan transkripsi menggunakan GPT-4o-mini.
+Performs contextual spell-checking and fixes transcription errors using GPT-4o-mini.
 
 **Requirements**:
 - `OPENAI_API_KEY` environment variable
 
 **Input**: `data/transcribed_dataset_*.csv`
-**Output**: `data/chatbot_food_dataset.csv` (+ kolom `cleaned_transcribe`)
+**Output**: `data/chatbot_food_dataset.csv` (+ `cleaned_transcribe` column)
 
 **Run**:
 ```bash
@@ -41,18 +41,18 @@ python pipeline/step2_clean.py
 
 ---
 
-### Step 3: Ekstraksi Informasi
+### Step 3: Information Extraction
 **File**: `step3_extract.py`
 
-Mengekstrak informasi terstruktur (11 kolom) menggunakan GPT-4o-mini.
+Extracts structured information (11 fields) using GPT-4o-mini JSON mode.
 
 **Requirements**:
 - `OPENAI_API_KEY` environment variable
 
 **Input**: `data/chatbot_food_dataset.csv`
-**Output**: `data/chatbot_food_dataset.csv` (+ 11 kolom terstruktur)
+**Output**: `data/chatbot_food_dataset.csv` (+ 11 structured columns)
 
-**Kolom yang diekstrak**:
+**Extracted columns**:
 - nama_tempat
 - lokasi
 - kategori_makanan
@@ -72,29 +72,27 @@ python pipeline/step3_extract.py
 
 ---
 
-### Step 4: Menambahkan Link Lokasi
-**File**: `step4_add_links.py`
+### Step 4: GCP Location Discovery
+**File**: `step4_gcp_places.py`
 
-Matching dengan Google Maps link dari `data/data_link.csv`.
+Matches and retrieves accurate Google Maps links using the GCP Places API.
 
-**Requirements**: None
+**Requirements**:
+- `GCP_MAPS_API_KEY` environment variable
 
-**Input**: 
-- `data/chatbot_food_dataset.csv`
-- `data/data_link.csv`
-
-**Output**: `data/chatbot_food_dataset.csv` (+ kolom `link_lokasi`)
+**Input**: `data/chatbot_food_dataset.csv`
+**Output**: `data/chatbot_food_dataset.csv` (+ `link_lokasi` column)
 
 **Run**:
 ```bash
-python pipeline/step4_add_links.py
+python pipeline/step4_gcp_places.py
 ```
 
 ---
 
-## 🚀 Run All Steps
+## Run All Steps
 
-Gunakan script runner utama:
+Use the main pipeline orchestrator from the root directory:
 
 ```bash
 python run_pipeline.py
@@ -112,20 +110,16 @@ python run_pipeline.py --skip 1,2
 python run_pipeline.py --list
 ```
 
-## 📊 Features
+## Features
 
-Semua script memiliki fitur:
-- ✅ Auto-save progress
-- ✅ Resume capability
-- ✅ Retry mechanism (3x)
-- ✅ Progress tracking
-- ✅ Error handling
-- ✅ Rate limiting (untuk API calls)
+All pipeline scripts implement the following data engineering best practices:
+- Auto-save progress
+- Incremental resume capability
+- Retry mechanism (3x) for transient faults
+- Built-in progress tracking
+- Robust error handling
+- Rate limiting for external API calls
 
-## 📚 Documentation
+## Documentation
 
-Lihat dokumentasi lengkap di `docs/02_PIPELINE_GUIDE.md`
-
----
-
-**Ready to process! 🚀**
+For an in-depth execution guide, refer to `docs/01_PIPELINE_GUIDE.md`

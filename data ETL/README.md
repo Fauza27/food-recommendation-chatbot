@@ -16,7 +16,7 @@ cp .env.example .env
 python run_pipeline.py
 ```
 
-**IMPORTANT**: You must configure the `.env` file with the appropriate API keys before running. Refer to `docs/06_ENV_SETUP.md` for complete guidelines.
+**IMPORTANT**: You must configure the `.env` file with the appropriate API keys before running. Refer to `docs/03_ENV_SETUP.md` for complete guidelines.
 
 ## Dataset
 
@@ -37,12 +37,11 @@ python run_pipeline.py
 
 Full documentation is available in the `docs/` directory:
 
-1. **[01_README.md](docs/01_README.md)** - Comprehensive project overview
-2. **[02_PIPELINE_GUIDE.md](docs/02_PIPELINE_GUIDE.md)** - Pipeline execution guide
-3. **[03_SETUP_GUIDE.md](docs/03_SETUP_GUIDE.md)** - Azure & OpenAI service setup
+1. **[01_PIPELINE_GUIDE.md](docs/01_PIPELINE_GUIDE.md)** - Pipeline execution guide
+2. **[02_SETUP_GUIDE.md](docs/02_SETUP_GUIDE.md)** - Azure & OpenAI service setup
+3. **[03_ENV_SETUP.md](docs/03_ENV_SETUP.md)** - Environment variables setup
 4. **[04_DATASET_INFO.md](docs/04_DATASET_INFO.md)** - Dataset structure & statistics
 5. **[05_TROUBLESHOOTING.md](docs/05_TROUBLESHOOTING.md)** - Common issues & solutions
-6. **[06_ENV_SETUP.md](docs/06_ENV_SETUP.md)** - Environment variables setup
 
 ## Technical Features
 
@@ -58,9 +57,11 @@ Full documentation is available in the `docs/` directory:
 ```
 data ETL/
 ├── docs/                          # Comprehensive documentation
-│   ├── 00_CLEANUP_REPORT.md
-│   ├── 01_README.md
-│   ├── ...
+│   ├── 01_PIPELINE_GUIDE.md
+│   ├── 02_SETUP_GUIDE.md
+│   ├── 03_ENV_SETUP.md
+│   ├── 04_DATASET_INFO.md
+│   └── 05_TROUBLESHOOTING.md
 │
 ├── pipeline/                      # Core ETL pipeline stages
 │   ├── step1_transcribe.py
