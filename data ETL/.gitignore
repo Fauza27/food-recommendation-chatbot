@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Credentials (IMPORTANT!)
+credentials/
+*.json
+!requirements/*.json
+
+# API Keys
+.env
+*.key
+
+# Audio files
+audio_downloads/
+audio_chunks/
+downloads/
+*.mp3
+*.mp4
+*.wav
+*.m4a
+
+# Results
+results/
+*.txt
+!requirements.txt
+!requirements/*.txt
+
+# Data
+data/*.csv
+dataset_*.csv
+!data/example_*.csv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
