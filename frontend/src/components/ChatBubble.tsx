@@ -13,6 +13,11 @@ interface Props {
 export function ChatBubble({ message }: Props) {
   const isUser = message.role === "user";
 
+  // Debug logging
+  if (!isUser && message.restaurants) {
+    console.log('ChatBubble rendering restaurants:', message.restaurants.length);
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}

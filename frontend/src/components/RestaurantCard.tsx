@@ -24,7 +24,7 @@ export function RestaurantCard({ restaurant, index = 0 }: Props) {
         <h3 className="font-bold text-foreground leading-tight text-base">{restaurant.nama_tempat}</h3>
         <Badge
           variant={isOpen ? "default" : "secondary"}
-          className={`shrink-0 ${isOpen ? "bg-green-100 text-green-800 border-green-200" : "bg-gray-100 text-gray-600 border-gray-200"}`}
+          className={`shrink-0 ${isOpen ? "bg-[hsl(var(--color-primary))] text-[hsl(var(--color-primary-foreground))] border-[hsl(var(--color-primary))]" : "bg-[hsl(var(--color-muted))] text-[hsl(var(--color-muted-foreground))] border-[hsl(var(--color-border))]"}`}
         >
           {restaurant.status_operasional || "N/A"}
         </Badge>
