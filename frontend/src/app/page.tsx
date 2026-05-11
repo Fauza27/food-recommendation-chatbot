@@ -71,35 +71,55 @@ export default function Home() {
         content: m.content,
       }));
 
-      await streamChatMessage(
-        msg,
-        history,
-        // onToken — append token ke message
-        (token: string) => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === aiMsgId ? { ...m, content: m.content + token } : m
-            )
-          );
-        },
-        // onRestaurants — set restaurant cards
-        (restaurants: RestaurantCard[]) => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === aiMsgId ? { ...m, restaurants } : m
-            )
-          );
-        },
-        // onDone
-        () => {
-          setLoading(false);
-        },
-        // onError
-        (errorMsg: string) => {
-          setError(errorMsg);
-          setLoading(false);
-        }
-      );
+      // Try streaming first
+      try {
+        await streamChatMessage(
+          msg,
+          history,
+          // onToken — append token ke message
+          (token: string) => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === aiMsgId ? { ...m, content: m.content + token } : m
+              )
+            );
+          },
+          // onRestaurants — set restaurant cards
+          (restaurants: RestaurantCard[]) => {
+            console.log('Setting restaurants in state:', restaurants?.length || 0);
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === aiMsgId ? { ...m, restaurants } : m
+              )
+            );
+          },
+          // onDone
+          () => {
+            setLoading(false);
+          },
+          // onError
+          (errorMsg: string) => {
+            setError(errorMsg);
+            setLoading(false);
+          }
+        );
+      } catch (streamError) {
+        console.warn('Streaming failed, falling back to non-streaming:', streamError);
+        
+        // Fallback to non-streaming
+        const response = await sendChatMessage(msg, history);
+        
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === aiMsgId ? { 
+              ...m, 
+              content: response.message,
+              restaurants: response.restaurants 
+            } : m
+          )
+        );
+        setLoading(false);
+      }
     } catch (err) {
       setError("Gagal mengirim pesan. Cek koneksi internet atau coba lagi nanti.");
       console.error("Chat error:", err);
@@ -160,7 +180,7 @@ export default function Home() {
             <AnimatePresence>{loading && !messages[messages.length - 1]?.content && <TypingIndicator />}</AnimatePresence>
             {error && (
               <div className="px-4">
-                <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-2 text-sm rounded-lg">
+                <div className="bg-[hsl(var(--color-destructive))] border border-[hsl(var(--color-destructive))] text-[hsl(var(--color-destructive-foreground))] px-4 py-2 text-sm rounded-lg">
                   {error}
                 </div>
               </div>
