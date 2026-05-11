@@ -190,6 +190,7 @@ export async function streamChatMessage(
               onToken(data.content);
               break;
             case 'restaurants':
+              console.log('Received restaurants:', data.restaurants?.length || 0);
               onRestaurants(data.restaurants);
               break;
             case 'done':
@@ -199,7 +200,7 @@ export async function streamChatMessage(
               onError(data.message);
               break;
           }
-        } catch {
+        } catch (e) {
           // Incomplete JSON, put back in buffer
           buffer = lines.slice(i).join('\n');
           break;
