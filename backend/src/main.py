@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -16,6 +17,7 @@ from .models import ChatRequest, ChatResponse, PostsResponse
 from .posts_service import PostsService
 from .rag_service import RAGService
 from .utils import get_samarinda_time
+from .config import get_settings
 
 
 logging.basicConfig(
@@ -24,9 +26,44 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+settings = get_settings()
+
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
+
+rag_service: RAGService | None = None
+posts_service: PostsService | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    global rag_service, posts_service
+
+    logger.info("Initializing PostsService...")
+    posts_service = PostsService()
+
+    logger.info("Initializing RAGService...")
+    try:
+        rag_service = RAGService()
+        logger.info("RAGService ready")
+    except Exception as exc:
+        logger.error("RAGService failed to initialize: %s", exc)
+        rag_service = None 
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down gracefully...")
+    if rag_service and rag_service._qdrant:
+        try:
+            rag_service._qdrant.close()
+            logger.info("Qdrant connection closed")
+        except Exception as exc:
+            logger.warning("Error closing Qdrant connection: %s", exc)
+    logger.info("Shutdown complete")
+
 
 app = FastAPI(
     title="Food Recommendation API",
@@ -36,6 +73,7 @@ app = FastAPI(
     version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # Rate limiting
@@ -57,41 +95,12 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", "X-Request-ID"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
 )
 
 rag_service: RAGService | None = None
 posts_service: PostsService | None = None
-
-
-@app.on_event("startup")
-async def startup() -> None:
-    global rag_service, posts_service
-
-    logger.info("Initializing PostsService...")
-    posts_service = PostsService()
-
-    logger.info("Initializing RAGService...")
-    try:
-        rag_service = RAGService()
-        logger.info("RAGService ready")
-    except Exception as exc:
-        logger.error("RAGService failed to initialize: %s", exc)
-        rag_service = None 
-
-
-@app.on_event("shutdown")
-async def shutdown() -> None:
-    """Tutup koneksi secara graceful."""
-    logger.info("Shutting down gracefully...")
-    if rag_service and rag_service._qdrant:
-        try:
-            rag_service._qdrant.close()
-            logger.info("Qdrant connection closed")
-        except Exception as exc:
-            logger.warning("Error closing Qdrant connection: %s", exc)
-    logger.info("Shutdown complete")
 
 
 @app.get("/", tags=["Info"])
@@ -239,18 +248,26 @@ async def get_posts(
     limit: int = Query(default=20, ge=1, le=100, description="Item per halaman"),
     search: str | None = Query(default=None, description="Kata kunci pencarian"),
     category: str | None = Query(default=None, description="Filter kategori"),
+    quality: str | None = Query(default=None, description="Filter kualitas data: 'high', 'medium', atau kosong untuk semua"),
 ):
     """
     Daftar semua restoran dengan pagination, pencarian, dan filter kategori.
 
     Search mencakup: nama_tempat, lokasi, cleaned_transcribe, extracted_hashtags.
     Category mencocokkan: kategori_makanan atau extracted_hashtags.
+    Quality filter: 'high' untuk data berkualitas tinggi, 'medium' untuk data cukup lengkap.
     """
     if posts_service is None:
         raise HTTPException(status_code=503, detail="Posts service tidak tersedia.")
 
     try:
-        result = posts_service.get_posts(page=page, limit=limit, search=search, category=category)
+        result = posts_service.get_posts(
+            page=page, 
+            limit=limit, 
+            search=search, 
+            category=category,
+            quality_filter=quality
+        )
         return PostsResponse(**result)
     except Exception as exc:
         logger.exception("Error fetching posts")
@@ -270,6 +287,172 @@ async def get_categories(request: Request):
     except Exception as exc:
         logger.exception("Error fetching categories")
         raise HTTPException(status_code=500, detail=f"Gagal mengambil kategori: {exc}")
+
+
+@app.post("/api/reload", tags=["Admin"])
+async def reload_data():
+    """Reload data dari CSV (untuk development)."""
+    global posts_service
+    try:
+        if posts_service:
+            posts_service._load_data()
+        return {"message": "Data reloaded successfully"}
+    except Exception as exc:
+        logger.exception("Error reloading data")
+        raise HTTPException(status_code=500, detail=f"Gagal reload data: {exc}")
+
+
+@app.get("/api/debug/qdrant", tags=["Admin"])
+async def debug_qdrant():
+    """Debug Qdrant collection status."""
+    if rag_service is None:
+        raise HTTPException(status_code=503, detail="RAG service tidak tersedia.")
+    
+    try:
+        # Get collection info
+        collection_info = rag_service._qdrant.get_collection(settings.qdrant_collection_name)
+        
+        # Try a simple query
+        test_vector = [0.1] * settings.embedding_dimensions
+        test_results = rag_service._qdrant.query_points(
+            collection_name=settings.qdrant_collection_name,
+            query=test_vector,
+            limit=5,
+        ).points
+        
+        return {
+            "collection_name": settings.qdrant_collection_name,
+            "points_count": collection_info.points_count,
+            "test_query_results": len(test_results),
+            "sample_scores": [f"{hit.score:.3f}" for hit in test_results[:3]] if test_results else [],
+            "qdrant_url": settings.qdrant_url,
+            "embedding_dimensions": settings.embedding_dimensions
+        }
+    except Exception as exc:
+        logger.exception("Error debugging Qdrant")
+        raise HTTPException(status_code=500, detail=f"Qdrant debug error: {exc}")
+
+
+@app.get("/api/debug/retrieve", tags=["Admin"])
+async def debug_retrieve(query: str = "bakso"):
+    """Manual retrieval test untuk debugging."""
+    if rag_service is None:
+        raise HTTPException(status_code=503, detail="RAG service tidak tersedia.")
+    
+    try:
+        # Manual retrieval dengan logging detail
+        logger.info("=== MANUAL RETRIEVAL DEBUG ===")
+        logger.info("Query: %s", query)
+        
+        # Generate embedding
+        vector = rag_service._embeddings.embed_query(query)
+        logger.info("Generated embedding vector length: %d", len(vector))
+        
+        # Query Qdrant langsung
+        hits = rag_service._qdrant.query_points(
+            collection_name=settings.qdrant_collection_name,
+            query=vector,
+            limit=20,
+        ).points
+        
+        logger.info("Raw Qdrant hits: %d", len(hits))
+        
+        # Tampilkan semua scores
+        all_scores = [hit.score for hit in hits]
+        logger.info("All scores: %s", [f"{s:.3f}" for s in all_scores[:10]])
+        
+        # Filter dengan threshold yang berbeda
+        results_03 = [hit for hit in hits if hit.score >= 0.3]
+        results_02 = [hit for hit in hits if hit.score >= 0.2]
+        results_01 = [hit for hit in hits if hit.score >= 0.1]
+        
+        logger.info("Results >= 0.3: %d", len(results_03))
+        logger.info("Results >= 0.2: %d", len(results_02))
+        logger.info("Results >= 0.1: %d", len(results_01))
+        
+        # Ambil top 5 tanpa filter
+        top_results = hits[:5]
+        restaurants = []
+        
+        for hit in top_results:
+            payload = hit.payload
+            restaurants.append({
+                "score": hit.score,
+                "nama_tempat": payload.get("nama_tempat", "Unknown"),
+                "kategori_makanan": payload.get("kategori_makanan", "Unknown"),
+                "ringkasan": payload.get("ringkasan", "")[:100] + "..." if payload.get("ringkasan") else "No summary"
+            })
+        
+        return {
+            "query": query,
+            "total_hits": len(hits),
+            "max_score": max(all_scores) if all_scores else 0,
+            "min_score": min(all_scores) if all_scores else 0,
+            "results_count": {
+                "threshold_0.3": len(results_03),
+                "threshold_0.2": len(results_02), 
+                "threshold_0.1": len(results_01)
+            },
+            "top_restaurants": restaurants
+        }
+        
+    except Exception as exc:
+        logger.exception("Error in manual retrieval")
+        raise HTTPException(status_code=500, detail=f"Manual retrieval error: {exc}")
+
+
+@app.get("/api/debug/full-rag", tags=["Admin"])
+async def debug_full_rag(query: str = "bakso"):
+    """Debug full RAG pipeline step by step."""
+    if rag_service is None:
+        raise HTTPException(status_code=503, detail="RAG service tidak tersedia.")
+    
+    try:
+        logger.info("=== FULL RAG DEBUG ===")
+        
+        # Step 1: Call _retrieve method directly
+        raw_results = rag_service._retrieve(query, top_k=40, category_filter=None)
+        logger.info("Step 1 - Raw retrieve results: %d", len(raw_results))
+        
+        # Step 2: Annotate status
+        annotated = rag_service._annotate_status(raw_results, target_time=None)
+        logger.info("Step 2 - After status annotation: %d", len(annotated))
+        
+        # Step 3: Take candidate pool
+        candidate_pool = annotated[:10]
+        logger.info("Step 3 - Candidate pool: %d", len(candidate_pool))
+        
+        # Step 4: Make cards
+        cards = rag_service._make_cards(candidate_pool, max_cards=5)
+        logger.info("Step 4 - Generated cards: %d", len(cards))
+        
+        # Return debug info
+        debug_info = {
+            "query": query,
+            "step1_raw_results": len(raw_results),
+            "step2_annotated": len(annotated),
+            "step3_candidate_pool": len(candidate_pool),
+            "step4_cards": len(cards),
+            "cards_data": [
+                {
+                    "nama_tempat": card.nama_tempat,
+                    "kategori_makanan": card.kategori_makanan,
+                    "status_operasional": card.status_operasional
+                } for card in cards
+            ]
+        }
+        
+        if len(raw_results) > 0:
+            debug_info["sample_raw_result"] = {
+                "nama_tempat": raw_results[0].get("nama_tempat", "Unknown"),
+                "kategori_makanan": raw_results[0].get("kategori_makanan", "Unknown")
+            }
+        
+        return debug_info
+        
+    except Exception as exc:
+        logger.exception("Error in full RAG debug")
+        raise HTTPException(status_code=500, detail=f"Full RAG debug error: {exc}")
 
 if __name__ == "__main__":
     uvicorn.run("src.main:app", host="0.0.0.0", port=8000, reload=True)

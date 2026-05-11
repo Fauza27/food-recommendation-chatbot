@@ -28,7 +28,7 @@ _DEFAULT_RECOMMENDATIONS = 5
 _RETRIEVE_MULTIPLIER = 2
 _RETRIEVE_MINIMUM = 40
 
-_MIN_RELEVANCE_SCORE = 0.55
+_MIN_RELEVANCE_SCORE = 0.1
 
 # Mapping keyword query → kategori di Qdrant payload
 _CATEGORY_KEYWORDS = {
@@ -114,7 +114,18 @@ class RAGService:
         Mendukung metadata pre-filtering berdasarkan kategori.
         Hasil difilter berdasarkan minimum relevance score.
         """
+        # Debug: Check collection info
+        try:
+            collection_info = self._qdrant.get_collection(settings.qdrant_collection_name)
+            logger.info("Collection '%s' has %d points", 
+                       settings.qdrant_collection_name, collection_info.points_count)
+        except Exception as e:
+            logger.error("Failed to get collection info: %s", e)
+            return []
+
         vector = self._embeddings.embed_query(query)
+        logger.info("Generated embedding vector of length %d for query: '%s'", 
+                   len(vector), query[:50])
 
         query_filter = None
         if category_filter:
@@ -134,7 +145,22 @@ class RAGService:
             limit=top_k,
         ).points
 
+        # Debug: Ambil semua hasil tanpa filter score untuk debugging
+        all_results = [hit.payload for hit in hits]
+        logger.info("Total hits from Qdrant: %d", len(all_results))
+        
+        if len(hits) > 0:
+            logger.info("Sample scores: %s", [f"{hit.score:.3f}" for hit in hits[:5]])
+        
         filtered = [hit.payload for hit in hits if hit.score >= _MIN_RELEVANCE_SCORE]
+        logger.info("Retrieved %d results from Qdrant (min score: %.2f)", 
+                   len(filtered), _MIN_RELEVANCE_SCORE)
+
+        # Jika tidak ada hasil dengan score tinggi, ambil top results tanpa filter score
+        if len(filtered) == 0 and len(hits) > 0:
+            logger.info("No results above min score, taking top %d results without score filter", 
+                       min(10, len(hits)))
+            filtered = [hit.payload for hit in hits[:10]]
 
         # Jika filter terlalu ketat dan hasil terlalu sedikit, fallback tanpa filter
         if category_filter and len(filtered) < 3:
@@ -148,6 +174,11 @@ class RAGService:
                 limit=top_k,
             ).points
             filtered = [hit.payload for hit in hits if hit.score >= _MIN_RELEVANCE_SCORE]
+            
+            # Fallback lagi jika masih kosong
+            if len(filtered) == 0 and len(hits) > 0:
+                logger.info("Still no results, taking top results without any filter")
+                filtered = [hit.payload for hit in hits[:10]]
 
         return filtered
 
@@ -308,13 +339,13 @@ DATA RESTORAN YANG TERSEDIA:
             if len(cards) >= max_cards:
                 break
             
-            # Ambil link Instagram dari URL — validasi bukan CDN URL
-            link_instagram = resto.get("link_instagram") or resto.get("url", "#")
-            if link_instagram and "cdninstagram" in link_instagram:
-                link_instagram = "#"
-            
-            cards.append(
-                RestaurantCard(
+            try:
+                # Ambil link Instagram dari URL — validasi bukan CDN URL
+                link_instagram = resto.get("url") or resto.get("link_instagram", "#")
+                if link_instagram and "cdninstagram" in link_instagram:
+                    link_instagram = "#"
+                
+                card = RestaurantCard(
                     nama_tempat=resto.get("nama_tempat", "Unknown"),
                     ringkasan=resto.get("ringkasan", "Tidak ada deskripsi"),
                     kategori_makanan=resto.get("kategori_makanan", "Unknown"),
@@ -327,8 +358,14 @@ DATA RESTORAN YANG TERSEDIA:
                     menu_andalan=resto.get("menu_andalan", [])[:5],
                     fasilitas=resto.get("fasilitas", []),
                 )
-            )
+                cards.append(card)
+                
+            except Exception as exc:
+                logger.warning("Failed to create card for restaurant %s: %s", 
+                             resto.get("nama_tempat", "Unknown"), exc)
+                continue
 
+        logger.info("Created %d restaurant cards from %d candidates", len(cards), len(restaurants))
         return cards
 
 
@@ -434,7 +471,10 @@ DATA RESTORAN YANG TERSEDIA:
         response = self._llm.invoke(messages)
 
         # 8. Kartu — dari pool kandidat yang sama agar selalu match dengan rekomendasi LLM
+        logger.info("Creating cards from %d candidates, requesting %d cards", 
+                   len(candidate_pool), requested_count)
         cards = self._make_cards(candidate_pool, max_cards=requested_count)
+        logger.info("Generated %d cards", len(cards))
 
         return response.content, cards
 
